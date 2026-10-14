@@ -196,7 +196,7 @@
 
 <header>
   <h1>🤲 AI 手势康复操教练</h1>
-  <p>原型 v0.4 —— 适老化界面：动作一览、大字提示、语音引导</p>
+  <p>原型 v0.5 —— 预生成语音包：任何浏览器都能发声、离线可用</p>
 </header>
 
 <main>
@@ -412,38 +412,107 @@ function classifyGesture(hand) {
   return "无手势";
 }
 
-// ===== 语音提示（D2，浏览器自带语音合成，零依赖） =====
-// 适老化刚需：老年人视力弱，听到"握拳"比看到文字更友好
+// ===== 语音引擎（预生成语音包 + WebAudio 播放）=====
+// 为什么不用浏览器自带语音合成（speechSynthesis）：
+// 微信内置浏览器等移动端"有接口但不出声"（手机实测），部分电脑没有
+// 中文语音包。改为预生成 MP3（微软神经语音，音质接近真人）打进网页：
+// 任何浏览器都能播、离线可用、不依赖网络语音服务——与"本地推理"的
+// 隐私架构一致（适老化刚需：老人主要靠听，语音是核心功能不是点缀）
 
-// 手机浏览器的发声"解锁"：iOS / 微信内置浏览器要求第一次发声
-// 必须发生在用户点击的处理函数里，之后才允许在别处发声。
-// 在"开始"按钮的点击里提前预热，否则后续语音全部被静音（测试反馈）
+const AUDIO_PIECES = {
+  // 数字（动态内容"第X轮/用时XX秒/共XX个"由片段拼接）
+  n0: "零", n1: "一", n2: "二", n3: "三", n4: "四", n5: "五",
+  n6: "六", n7: "七", n8: "八", n9: "九", n10: "十", n100: "百",
+  // 动作名
+  g1: "握拳", g2: "张开", g3: "对捏", g4: "剪刀手", g5: "竖大拇指",
+  // 固定短语
+  henhao: "，很好",
+  praise1: "真棒！", praise2: "做得很好！", praise3: "好样的！",
+  praise4: "非常标准！", praise5: "太厉害了！",
+  start: "跟练开始，第一个动作，",
+  hold: "，保持两秒",
+  next: "下一个动作，",
+  hint_v: "，食指和中指分开",
+  please: "请做",
+  finish1: "全部完成！共",
+  finish2: "个动作，用时",
+  finish3: "秒！",
+  di: "第",
+  round1: "轮完成，用时",
+  round2: "秒！下一轮开始，先做",
+  voiceon: "语音提示已开启",
+};
+
+const audioBuffers = {};   // 片段名 -> AudioBuffer
+let audioReady = false;    // 语音包是否全部加载完成
+let currentSources = [];   // 正在播放的节点（新语音来了先打断旧的）
+const SPEAK_GAP = 0.12;    // 片段之间停顿（秒），拼接出自然语感
+
+// 手机浏览器的发声"解锁"：要求第一次发声发生在用户点击的处理函数里，
+// 在"开始"按钮的点击里提前激活音频通道（测试反馈：手机无声）
 function unlockAudio() {
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === "suspended") audioCtx.resume();
-    if (window.speechSynthesis) {
-      const u = new SpeechSynthesisUtterance(" ");
-      u.volume = 0;              // 空句子、零音量，只为解锁，用户听不到
-      speechSynthesis.speak(u);
-    }
   } catch (e) { /* 音频不可用不阻塞主流程 */ }
 }
 
-function speak(text) {
-  if (!voiceOn || !window.speechSynthesis) return;
-  speechSynthesis.cancel();                    // 打断上一条，保证播报实时
-  // iOS 的坑：cancel 后立刻 speak 会被丢弃，隔一小拍再播（50ms 人耳无感）
-  setTimeout(() => {
-    if (!voiceOn) return;
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "zh-CN";
-    u.rate = 0.95;                             // 稍慢语速，老年人友好
-    u.volume = 1;
-    const zh = speechSynthesis.getVoices().find(v => v.lang.startsWith("zh"));
-    if (zh) u.voice = zh;
-    speechSynthesis.speak(u);
-  }, 50);
+// 启动时预加载并解码全部语音片段（解码不需要用户手势，播放才需要）
+async function loadAudioPieces() {
+  const names = Object.keys(AUDIO_PIECES);
+  const results = await Promise.allSettled(names.map(async (name) => {
+    const res = await fetch("audio/" + name + ".mp3");
+    if (!res.ok) throw new Error(name + " " + res.status);
+    audioBuffers[name] = await audioCtx.decodeAudioData(await res.arrayBuffer());
+  }));
+  const ok = results.filter(r => r.status === "fulfilled").length;
+  audioReady = ok === names.length;
+  if (!audioReady) {
+    setStatus("语音包加载不完整（" + ok + "/" + names.length + "），请检查网络后刷新");
+  }
+}
+
+function stopSpeech() {
+  for (const s of currentSources) { try { s.stop(); } catch (e) {} }
+  currentSources = [];
+}
+
+// 打断当前语音，按顺序播放一串片段（如 ["start","g1","hold"]）
+function speak(parts) {
+  if (!voiceOn || !audioReady) return;
+  stopSpeech();
+  let t = audioCtx.currentTime + 0.02;
+  for (const name of parts) {
+    const buf = audioBuffers[name];
+    if (!buf) continue;
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(audioCtx.destination);
+    src.start(t);
+    currentSources.push(src);
+    t += buf.duration + SPEAK_GAP;
+  }
+}
+
+// 数字 1~999 → 语音片段序列：45 → [四,十,五]；105 → [一,百,零,五]
+function numParts(n) {
+  if (n <= 10) return ["n" + n];
+  if (n < 20) { const o = n - 10; return o ? ["n10", "n" + o] : ["n10"]; }
+  if (n < 100) {
+    const t = Math.floor(n / 10), o = n % 10;
+    return o ? ["n" + t, "n10", "n" + o] : ["n" + t, "n10"];
+  }
+  const h = Math.floor(n / 100), r = n % 100;
+  if (r === 0) return ["n" + h, "n100"];
+  if (r < 10) return ["n" + h, "n100", "n0", "n" + r];
+  const t = Math.floor(r / 10), o = r % 10;
+  return o ? ["n" + h, "n100", "n" + t, "n10", "n" + o]
+           : ["n" + h, "n100", "n" + t, "n10"];
+}
+
+// 片段序列 -> 文字（调试/兜底用）
+function partsText(parts) {
+  return parts.map(p => AUDIO_PIECES[p] || "").join("");
 }
 
 // 取手势的纯文字名（去掉表情符号）："✊ 握拳" → "握拳"
@@ -477,7 +546,8 @@ function updateGesture(raw) {
     lastSpoken = stableGesture;
     // 跟练模式下不播报手势名（由跟练流程自己引导），避免语音打架
     if (!exMode && stableGesture !== "无手势") {
-      speak(gestureName(stableGesture) + "，很好");  // 播报："握拳，很好"
+      const p = GESTURE_PIECE[gestureName(stableGesture)];
+      if (p) speak([p, "henhao"]);   // 播报："握拳，很好"
     }
   }
 }
@@ -486,12 +556,15 @@ function updateGesture(raw) {
 // 流程：语音播报目标动作 → 用户照做 → 保持 2 秒（进度条）→ "叮" + 表扬 → 下一个
 // 一轮 5 个动作（握拳→张开→对捏→剪刀手→竖大拇指，由易到难），共 3 轮
 const EXERCISES = [
-  { icon: "✊", name: "握拳" },
-  { icon: "🖐", name: "张开" },
-  { icon: "🤏", name: "对捏" },
-  { icon: "✌️", name: "剪刀手", hint: "食指和中指分开" },
-  { icon: "👍", name: "竖大拇指" },
+  { icon: "✊", name: "握拳",     piece: "g1" },
+  { icon: "🖐", name: "张开",     piece: "g2" },
+  { icon: "🤏", name: "对捏",     piece: "g3" },
+  { icon: "✌️", name: "剪刀手",   piece: "g4", hint: "食指和中指分开" },
+  { icon: "👍", name: "竖大拇指", piece: "g5" },
 ];
+const GESTURE_PIECE = {};   // 手势名 -> 语音片段名（自由练习播报用）
+EXERCISES.forEach(e => { GESTURE_PIECE[e.name] = e.piece; });
+const PRAISE_PIECES = ["praise1", "praise2", "praise3", "praise4", "praise5"];
 const ROUNDS        = 3;
 const TOTAL_TARGETS = EXERCISES.length * ROUNDS;  // 15 个动作
 const HOLD_FRAMES   = 60;                         // 保持约 2 秒（60 帧）才算完成
@@ -505,13 +578,6 @@ let exRoundStartT = 0;       // 本轮（每 5 个动作）开始时间
 
 // 成功音效：浏览器合成一个短促的高音"叮"，零音频文件依赖
 let audioCtx = null;
-
-// 预加载语音库：iOS 上 getVoices() 首次调用常返回空数组，
-// 需要等 voiceschanged 事件后才拿到中文语音（移动端无声音排查点）
-if (window.speechSynthesis) {
-  speechSynthesis.getVoices();
-  speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
-}
 function playDing() {
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
@@ -547,7 +613,7 @@ function beginExercise() {
   exRoundStartT = exTotalStartT;
   targetBox.style.display = "block";
   showTarget();
-  speak("跟练开始！第一个动作，握拳，保持两秒。");
+  speak(["start", "g1", "hold"]);
 }
 
 // 每一帧调用：对比"当前确认手势"和"目标动作"
@@ -559,7 +625,7 @@ function updateExercise() {
   } else {
     // 之前已经保持了一阵又变走了：温和提醒一句（避免每帧都喊）
     if (exHold > 15 && stableGesture !== "无手势") {
-      speak("请做" + cur.name);
+      speak(["please", cur.piece]);
     }
     exHold = 0;
   }
@@ -571,6 +637,8 @@ function updateExercise() {
     exHold = 0;
     playDing();
     const praise = PRAISES[(exDone - 1) % PRAISES.length];
+    const praisePiece = PRAISE_PIECES[(exDone - 1) % PRAISE_PIECES.length];
+    setStatus(praise + "（已完成 " + exDone + " / " + TOTAL_TARGETS + "）");
     if (exDone >= TOTAL_TARGETS) {
       // 全部 3 轮完成
       const secs = Math.round((performance.now() - exTotalStartT) / 1000);
@@ -580,7 +648,8 @@ function updateExercise() {
       targetText.textContent = "全部完成！";
       targetStat.textContent =
         "共完成 " + TOTAL_TARGETS + " 个动作，用时 " + secs + " 秒";
-      speak(praise + " 全部完成！共" + TOTAL_TARGETS + "个动作，用时" + secs + "秒！");
+      speak([praisePiece, "finish1", ...numParts(TOTAL_TARGETS),
+        "finish2", ...numParts(secs), "finish3"]);
       return;
     }
     const next = EXERCISES[exDone % EXERCISES.length];
@@ -588,12 +657,12 @@ function updateExercise() {
       // 一轮（5 个动作）完成，进入下一轮
       const rSecs = Math.round((performance.now() - exRoundStartT) / 1000);
       exRoundStartT = performance.now();
-      speak(praise + " 第" + (exDone / EXERCISES.length) + "轮完成，用时" +
-        rSecs + "秒！下一轮开始，先做" + next.name);
+      speak([praisePiece, "di", ...numParts(exDone / EXERCISES.length),
+        "round1", ...numParts(rSecs), "round2", next.piece]);
     } else {
       // 正常推进：表扬 + 报下一个动作（语音引导，老人主要靠听）
-      speak(praise + " 下一个动作，" + next.name +
-        (next.hint ? "，" + next.hint : "") + "，保持两秒");
+      speak([praisePiece, "next", next.piece,
+        ...(next.hint ? ["hint_v"] : []), "hold"]);
     }
     showTarget();
   }
@@ -711,9 +780,9 @@ async function ensureRunning() {
   errBox.style.display = "none";
   noHandFrames = 0;
   unlockAudio();   // 必须在按钮点击里调用：解锁手机浏览器的发声限制
-  if (!window.speechSynthesis) {
-    // 少数浏览器（如安卓微信旧内核）不支持语音合成：降级为文字+音效
-    setStatus("当前浏览器不支持语音播报，请跟随屏幕文字提示练习");
+  if (!audioReady) {
+    // 语音包还没加载完：先提示，加载完成后自动恢复播报
+    setStatus("语音包加载中，稍候将自动开始播报…");
   }
   if (!landmarker) {
     try { await loadModel(); }
@@ -754,8 +823,13 @@ document.getElementById("btnVoice").addEventListener("click", () => {
   voiceOn = !voiceOn;
   document.getElementById("btnVoice").textContent =
     voiceOn ? "🔊 语音提示：开" : "🔇 语音提示：关";
-  if (voiceOn) speak("语音提示已开启");
+  if (voiceOn) speak(["voiceon"]);
 });
+
+// 启动：创建音频上下文并预加载语音包
+// （解码不需要用户手势，播放才需要——"解锁"在按钮点击时完成）
+audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+loadAudioPieces();
 </script>
 </body>
 </html>
