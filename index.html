@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>AI 手势康复操教练（原型 v0.1）</title>
+<style>
+  /* ============ 适老化设计基调（D4 会继续细化） ============
+     大字、高对比、少层级、大按钮 —— 这是本作品的差异化卖点之一 */
+  :root {
+    --teal: #2a9d8f;        /* 主色：温和的青绿色（延续团队设计语言） */
+    --deep: #155e59;        /* 深色：标题 */
+    --bg:   #f7faf9;        /* 背景 */
+    --ink:  #1d2b2a;        /* 正文 */
+    --gold: #f4a261;        /* 强调色 */
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 22px;          /* 适老化：全局大字号 */
+    min-height: 100vh;
+  }
+  header {
+    background: var(--deep);
+    color: #fff;
+    padding: 24px 32px;
+    text-align: center;
+  }
+  header h1 { font-size: 36px; letter-spacing: 2px; }
+  header p  { font-size: 20px; color: #bfe3df; margin-top: 8px; }
+
+  main { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+
+  /* 摄像头画面区 */
+  .stage {
+    position: relative;
+    background: #1a1a1a;
+    border-radius: 16px;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+  }
+  video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);   /* 镜像显示，像照镜子，符合用户直觉 */
+  }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* 识别状态面板 */
+  .status {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 20px 28px;
+    flex: 1;
+    min-width: 200px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    text-align: center;
+  }
+  .card .label { font-size: 20px; color: #5c6f6d; }
+  .card .value { font-size: 40px; font-weight: 700; color: var(--deep); margin-top: 8px; }
+
+  /* 大按钮 */
+  .btn-row { margin-top: 28px; display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
+
+  /* 跟练目标卡（D3）：大图标 + 大文字 + 保持进度条 */
+  .target {
+    display: none;
+    margin-top: 24px;
+    background: #fff;
+    border: 4px solid var(--gold);
+    border-radius: 16px;
+    padding: 24px;
+    text-align: center;
+  }
+  .target .target-label { font-size: 20px; color: #5c6f6d; }
+  .target .target-main {
+    font-size: 56px;
+    font-weight: 700;
+    color: var(--deep);
+    margin: 8px 0;
+  }
+  .target .target-main span { margin: 0 12px; }
+  .target .target-sub { font-size: 22px; color: #5c6f6d; margin-bottom: 12px; }
+  .holdbar {
+    max-width: 420px;
+    margin: 0 auto;
+    height: 18px;
+    background: #e9efee;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .holdbar div {
+    height: 100%;
+    width: 0%;
+    background: var(--gold);
+    border-radius: 999px;
+    transition: width .15s linear;
+  }
+  .target .target-stat { font-size: 24px; color: var(--deep); margin-top: 12px; }
+  button {
+    font-size: 28px;
+    padding: 20px 48px;
+    border: none;
+    border-radius: 999px;
+    cursor: pointer;
+    font-weight: 700;
+    letter-spacing: 2px;
+  }
+  #btnStart { background: var(--teal); color: #fff; }
+  #btnStart:hover { background: #238d81; }
+  #btnStop  { background: #e9efee; color: var(--deep); }
+  #btnStop:hover { background: #dde7e5; }
+  #btnExercise { background: var(--gold); color: #fff; }
+  #btnExercise:hover { background: #e8924b; }
+
+  .hint {
+    margin-top: 24px;
+    text-align: center;
+    color: #7a8b89;
+    font-size: 19px;
+    line-height: 1.8;
+  }
+  /* 运行状态行：每一步加载/出错都会显示在这里（调试友好） */
+  .sysmsg {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 22px;
+    color: var(--deep);
+    background: #e8f3f1;
+    border-radius: 14px;
+    padding: 14px 20px;
+  }
+  /* 动作一览（D4 适老化：老人先看懂再练，评审一眼看懂产品） */
+  .guide {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-top: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+  }
+  .guide-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--deep);
+    text-align: center;
+    margin-bottom: 16px;
+  }
+  .guide-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+  .guide-item {
+    background: #f7faf9;
+    border-radius: 12px;
+    padding: 14px 6px;
+    text-align: center;
+  }
+  .guide-icon { font-size: 44px; line-height: 1.2; }
+  .guide-name { font-size: 24px; font-weight: 700; color: var(--deep); margin-top: 4px; }
+  .guide-tip  { font-size: 17px; color: #5c6f6d; margin-top: 2px; line-height: 1.5; }
+  @media (max-width: 720px) {
+    .guide-row { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  footer {
+    margin: 32px 16px 24px;
+    text-align: center;
+    color: #7a8b89;
+    font-size: 18px;
+    line-height: 1.9;
+  }
+
+  .error-box {
+    display: none;
+    background: #fdecea;
+    color: #b3402f;
+    border-radius: 14px;
+    padding: 24px;
+    margin-top: 20px;
+    font-size: 22px;
+    text-align: center;
+    line-height: 1.7;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🤲 AI 手势康复操教练</h1>
+  <p>原型 v0.4 —— 适老化界面：动作一览、大字提示、语音引导</p>
+</header>
+
+<main>
+  <div class="stage">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <div class="status">
+    <div class="card">
+      <div class="label">检测到的手</div>
+      <div class="value" id="handCount">0</div>
+    </div>
+    <div class="card">
+      <div class="label">识别帧率</div>
+      <div class="value" id="fps">--</div>
+    </div>
+    <div class="card">
+      <div class="label">手势判定</div>
+      <div class="value" id="gesture" style="font-size:30px">无手势</div>
+    </div>
+  </div>
+
+  <div class="target" id="targetBox">
+    <div class="target-label">🎯 本轮目标动作</div>
+    <div class="target-main">
+      <span id="targetIcon">✊</span><span id="targetText">握拳</span>
+    </div>
+    <div class="target-sub">请保持这个手势 2 秒，听到"叮"就成功</div>
+    <div class="holdbar"><div id="holdBar"></div></div>
+    <div class="target-stat" id="targetStat">第 1 轮 · 已完成 0 / 15</div>
+  </div>
+
+  <div class="btn-row">
+    <button id="btnStart">📷 开始识别</button>
+    <button id="btnExercise">🏋️ 开始跟练</button>
+    <button id="btnStop">⏹ 停止</button>
+    <button id="btnVoice">🔊 语音提示：开</button>
+  </div>
+
+  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。</div>
+
+  <div class="error-box" id="errBox"></div>
+
+  <div class="guide">
+    <div class="guide-title">🤲 康复操动作一览</div>
+    <div class="guide-row">
+      <div class="guide-item"><div class="guide-icon">✊</div><div class="guide-name">握拳</div><div class="guide-tip">五指用力收拢</div></div>
+      <div class="guide-item"><div class="guide-icon">🖐</div><div class="guide-name">张开</div><div class="guide-tip">五指尽力伸直</div></div>
+      <div class="guide-item"><div class="guide-icon">🤏</div><div class="guide-name">对捏</div><div class="guide-tip">拇指食指尖相碰</div></div>
+      <div class="guide-item"><div class="guide-icon">✌️</div><div class="guide-name">剪刀手</div><div class="guide-tip">两指伸直并分开</div></div>
+      <div class="guide-item"><div class="guide-icon">👍</div><div class="guide-name">竖大拇指</div><div class="guide-tip">拇指竖起四指握</div></div>
+    </div>
+  </div>
+
+  <div class="hint">
+    ① 点「开始跟练」，跟着语音提示做动作<br>
+    ② 将手掌完整伸入画面，光线充足更准确<br>
+    ③ 每个动作保持 2 秒，"叮"一声即完成
+  </div>
+</main>
+
+<footer>
+  🔒 所有识别都在您自己的设备上完成，摄像头画面不会上传到任何地方<br>
+  AI 手势康复操教练 · 适老化设计 · 让科技守护每一双手
+</footer>
+
+<script type="module">
+/* ============================================================
+ * D1 骨架：摄像头 + MediaPipe Hands 关键点检测
+ * 逻辑：摄像头帧 → HandLandmarker 检测 21 个手部关键点 →
+ *       画在 canvas 上 + 手部骨架连线
+ * D2 将在此基础上写"手势判定规则"
+ * 注意：0.10.14 只有 ESM 版（vision_bundle.mjs），故用模块导入
+ * ============================================================ */
+import { FilesetResolver, HandLandmarker } from
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+const video   = document.getElementById("video");
+const canvas  = document.getElementById("canvas");
+const ctx     = canvas.getContext("2d");
+const handCountEl = document.getElementById("handCount");
+const fpsEl       = document.getElementById("fps");
+const gestureEl   = document.getElementById("gesture");
+const errBox      = document.getElementById("errBox");
+const sysmsg      = document.getElementById("sysmsg");
+const targetBox   = document.getElementById("targetBox");
+const targetIcon  = document.getElementById("targetIcon");
+const targetText  = document.getElementById("targetText");
+const targetStat  = document.getElementById("targetStat");
+const holdBar     = document.getElementById("holdBar");
+
+// 状态行 + 错误提示：任何一步失败都会写出来，方便定位问题
+function setStatus(msg) { sysmsg.textContent = "状态：" + msg; }
+function showError(msg) {
+  errBox.style.display = "block";
+  errBox.textContent = msg;
+  setStatus("出错了，请看上方红字提示");
+}
+
+// 兜底：脚本加载失败（如 CDN 网络不通）时，错误会被显示出来，
+// 而不是点了按钮毫无反应
+window.addEventListener("error", (e) => {
+  showError("页面脚本加载失败：" + (e.message || "未知错误") +
+    "。请检查网络，然后按 Ctrl+F5 强制刷新。");
+});
+
+// 21 个关键点的标准连线（MediaPipe 官方 HandConnections）
+const HAND_CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4],          // 大拇指
+  [0,5],[5,6],[6,7],[7,8],          // 食指
+  [5,9],[9,10],[10,11],[11,12],     // 中指
+  [9,13],[13,14],[14,15],[15,16],   // 无名指
+  [13,17],[17,18],[18,19],[19,20],  // 小指
+  [0,17],                           // 掌心
+];
+
+let landmarker = null;   // MediaPipe 手部检测器
+let running = false;     // 识别循环开关
+let stream = null;       // 摄像头流
+let lastT = performance.now();
+
+// ===== 手势判定状态（D2） =====
+let stableGesture     = "无手势";  // 投票确认后的手势（对外显示）
+let gestureConfirmed  = false;     // 当前是否已有确认手势
+let gestureHistory    = [];        // 最近若干帧的原始判定（滑动窗口投票）
+let lastSpoken        = "";        // 上一次语音播报的手势（避免重复播报）
+let voiceOn           = true;      // 语音提示开关
+const STABLE_FRAMES   = 8;         // 投票窗口帧数（约 0.3 秒）
+const VOTE_NEEDED     = 5;         // 8 帧里至少 5 帧一致才算确认
+// 为什么用投票而不是"连续 8 帧"：指尖互相接触时（对捏、握拳）
+// MediaPipe 关键点会抖动，判定结果一帧一跳，"连续一致"永远凑不满；
+// 投票允许少数帧不一致，识别立刻变得灵敏稳定（测试反馈驱动）
+
+// ===== 手势判定规则（D2 核心） =====
+// 关键点编号：0 手腕 | 1-4 拇指 | 5-8 食指 | 9-12 中指 | 13-16 无名指 | 17-20 小指
+// 判定思路：指尖到手腕的距离 vs 指根到手腕的距离——指尖更远 = 手指伸直
+// 全部用"手腕到中指根"的距离归一化，不同人手大小、离镜头远近都适用
+
+function dist(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function handScale(hand) {
+  return Math.max(dist(hand[0], hand[9]), 1e-6);  // 手腕 → 中指根
+}
+
+// 手指伸直判定：指尖比指根离手腕更远。
+// 阈值 1.2 倍（原 1.05）：手自然放松时手指微弯，指尖只比指根远一点点，
+// 1.05 会误判"张开"；1.2 要求手指真正伸直（测试反馈：松弛的手被轻易识别为张开）
+function isFingerExtended(hand, tipIdx, pipIdx) {
+  return dist(hand[tipIdx], hand[0]) > dist(hand[pipIdx], hand[0]) * 1.2;
+}
+
+// 拇指伸直判定：拇指尖比拇指根离小指根更远（拇指远离掌心 = 张开）
+// 阈值收紧到 1.3 倍：攥拳时拇指即使没贴紧，也达不到 1.3 倍，
+// 只有真正竖起/张开的拇指才过线（测试反馈：1.05 倍会把松拳误判成大拇指）
+function isThumbExtended(hand) {
+  return dist(hand[4], hand[17]) > dist(hand[2], hand[17]) * 1.3;
+}
+
+// 手指弯曲判定：指尖明显比指根更靠近手腕 = 真的弯起来了。
+// 0.9 倍以下才算"握住"——自然放松的手指尖只微弯（约 0.95~1.05 倍），
+// 达不到 0.9 → 不会被误判为握拳（测试反馈：不使劲也显示握拳）
+function isFingerCurled(hand, tipIdx, pipIdx) {
+  return dist(hand[tipIdx], hand[0]) < dist(hand[pipIdx], hand[0]) * 0.9;
+}
+
+// 5 个康复动作 + 无手势：
+//   ✊ 握拳 | 🖐 张开 | 🤏 对捏 | ✌️ 剪刀手 | 👍 竖大拇指
+function classifyGesture(hand) {
+  const s = handScale(hand);
+  const index  = isFingerExtended(hand, 8, 6);    // 食指
+  const middle = isFingerExtended(hand, 12, 10);  // 中指
+  const ring   = isFingerExtended(hand, 16, 14);  // 无名指
+  const pinky  = isFingerExtended(hand, 20, 18);  // 小指
+  const thumb  = isThumbExtended(hand);
+  const extCount = [index, middle, ring, pinky].filter(Boolean).length;
+  // 真正弯起来的手指个数（握拳/竖大拇指的必备条件，见 isFingerCurled 注释）
+  const curled = [
+    isFingerCurled(hand, 8, 6),    // 食指
+    isFingerCurled(hand, 12, 10),  // 中指
+    isFingerCurled(hand, 16, 14),  // 无名指
+    isFingerCurled(hand, 20, 18),  // 小指
+  ].filter(Boolean).length;
+  // 对捏：拇指尖必须真的贴近食指尖。两条都要求：
+  //   ① 两指尖距离小于 0.35 倍手长
+  //   ② 拇指尖离食指"根"明显比离食指"尖"远（0.6 倍）——真正的捏合
+  //      是"指尖碰指尖"；攥拳/自然放松时拇指尖垂在食指旁、贴着指根，
+  //      这条不成立
+  // 测试反馈史：放宽 0.45 +"食指根抬起"OR 判据后，放松的手被误判为
+  // 对捏（放松时食指根也是抬起的，且拇指尖自然垂在食指旁 0.3~0.45 倍
+  // 手长处）→ 收紧回 0.35 + 相对判据；对捏的"不灵敏"真凶是关键点抖动，
+  // 已由投票机制解决，不需要宽松阈值兜底
+  const pinch =
+    dist(hand[4], hand[8]) < s * 0.35 &&
+    dist(hand[4], hand[8]) < dist(hand[4], hand[6]) * 0.6;
+
+  // 判定顺序重要：对捏时拇指张开、四指弯曲，样子最像竖大拇指，
+  // 所以对捏必须最先查（测试反馈：顺序反了会把对捏误判成大拇指）
+  // 竖大拇指 / 握拳都要求"至少 3 指真的弯起来"：
+  // 自然放松的手四指只微弯、拇指耷拉着，一样都不能算
+  if (pinch) return "🤏 对捏";
+  if (thumb && extCount === 0 && curled >= 3) return "👍 竖大拇指";
+  // 剪刀手：食指+中指伸直、无名指+小指弯，且两指要张开呈 V 形。
+  // 两指尖距离 > 0.25 倍手长——放松的手食指中指自然并在一起，
+  // 再伸也达不到这个距离（测试反馈：放松的手某些角度误判剪刀手）。
+  // 顺带的好处：手指外展（分开）本身也是手部康复训练的目标之一
+  if (index && middle && !ring && !pinky &&
+      dist(hand[8], hand[12]) > s * 0.25) return "✌️ 剪刀手";
+  if (extCount === 4) return "🖐 张开";
+  if (extCount === 0 && curled >= 3) return "✊ 握拳";
+  return "无手势";
+}
+
+// ===== 语音提示（D2，浏览器自带语音合成，零依赖） =====
+// 适老化刚需：老年人视力弱，听到"握拳"比看到文字更友好
+function speak(text) {
+  if (!voiceOn || !window.speechSynthesis) return;
+  speechSynthesis.cancel();                    // 打断上一条，保证播报实时
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "zh-CN";
+  u.rate = 0.95;                               // 稍慢语速，老年人友好
+  const zh = speechSynthesis.getVoices().find(v => v.lang.startsWith("zh"));
+  if (zh) u.voice = zh;
+  speechSynthesis.speak(u);
+}
+
+// 取手势的纯文字名（去掉表情符号）："✊ 握拳" → "握拳"
+function gestureName(g) { return g.replace(/[^一-龥]/g, ""); }
+
+// 滑动窗口投票：8 帧里 ≥5 帧同手势才确认，并更新显示 + 语音播报
+function updateGesture(raw) {
+  gestureHistory.push(raw);
+  if (gestureHistory.length > STABLE_FRAMES) gestureHistory.shift();
+
+  // 统计窗口内出现最多的手势
+  const counts = {};
+  let best = raw, bestN = 0;
+  for (const g of gestureHistory) {
+    counts[g] = (counts[g] || 0) + 1;
+    if (counts[g] > bestN) { bestN = counts[g]; best = g; }
+  }
+
+  const confirmed = gestureHistory.length >= STABLE_FRAMES &&
+    bestN >= VOTE_NEEDED;
+  if (confirmed) {
+    stableGesture = best;
+    gestureConfirmed = true;
+    gestureEl.textContent = stableGesture;
+  } else {
+    gestureConfirmed = false;
+    gestureEl.textContent = "识别中…";
+  }
+
+  if (confirmed && stableGesture !== lastSpoken) {
+    lastSpoken = stableGesture;
+    // 跟练模式下不播报手势名（由跟练流程自己引导），避免语音打架
+    if (!exMode && stableGesture !== "无手势") {
+      speak(gestureName(stableGesture) + "，很好");  // 播报："握拳，很好"
+    }
+  }
+}
+
+// ===== D3：引导式跟练流程 =====
+// 流程：语音播报目标动作 → 用户照做 → 保持 2 秒（进度条）→ "叮" + 表扬 → 下一个
+// 一轮 5 个动作（握拳→张开→对捏→剪刀手→竖大拇指，由易到难），共 3 轮
+const EXERCISES = [
+  { icon: "✊", name: "握拳" },
+  { icon: "🖐", name: "张开" },
+  { icon: "🤏", name: "对捏" },
+  { icon: "✌️", name: "剪刀手", hint: "食指和中指分开" },
+  { icon: "👍", name: "竖大拇指" },
+];
+const ROUNDS        = 3;
+const TOTAL_TARGETS = EXERCISES.length * ROUNDS;  // 15 个动作
+const HOLD_FRAMES   = 60;                         // 保持约 2 秒（60 帧）才算完成
+const PRAISES = ["真棒！", "做得很好！", "好样的！", "非常标准！", "太厉害了！"];
+
+let exMode = false;          // 跟练模式开关
+let exDone = 0;              // 已完成的动作数（0 ~ 15）
+let exHold = 0;              // 当前动作已保持的帧数
+let exTotalStartT = 0;       // 整轮跟练开始时间
+let exRoundStartT = 0;       // 本轮（每 5 个动作）开始时间
+
+// 成功音效：浏览器合成一个短促的高音"叮"，零音频文件依赖
+let audioCtx = null;
+function playDing() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = "sine";
+    o.frequency.value = 880;
+    g.gain.setValueAtTime(0.3, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+    o.connect(g);
+    g.connect(audioCtx.destination);
+    o.start();
+    o.stop(audioCtx.currentTime + 0.4);
+  } catch (e) { /* 音效失败不影响主流程 */ }
+}
+
+function showTarget() {
+  const cur = EXERCISES[exDone % EXERCISES.length];
+  const round = Math.min(Math.floor(exDone / EXERCISES.length) + 1, ROUNDS);
+  targetIcon.textContent = cur.icon;
+  targetText.textContent = cur.name;
+  holdBar.style.width = "0%";
+  targetStat.textContent =
+    "第 " + round + " 轮 · 已完成 " + exDone + " / " + TOTAL_TARGETS;
+}
+
+function beginExercise() {
+  exMode = true;
+  exDone = 0;
+  exHold = 0;
+  exTotalStartT = performance.now();
+  exRoundStartT = exTotalStartT;
+  targetBox.style.display = "block";
+  showTarget();
+  speak("跟练开始！第一个动作，握拳，保持两秒。");
+}
+
+// 每一帧调用：对比"当前确认手势"和"目标动作"
+function updateExercise() {
+  if (!gestureConfirmed) return;   // 投票未确认中，冻结判定（保持进度不清零）
+  const cur = EXERCISES[exDone % EXERCISES.length];
+  if (gestureName(stableGesture) === cur.name) {
+    exHold++;
+  } else {
+    // 之前已经保持了一阵又变走了：温和提醒一句（避免每帧都喊）
+    if (exHold > 15 && stableGesture !== "无手势") {
+      speak("请做" + cur.name);
+    }
+    exHold = 0;
+  }
+  holdBar.style.width = Math.min(100, exHold / HOLD_FRAMES * 100) + "%";
+
+  if (exHold >= HOLD_FRAMES) {
+    // ✅ 一个动作完成
+    exDone++;
+    exHold = 0;
+    playDing();
+    const praise = PRAISES[(exDone - 1) % PRAISES.length];
+    if (exDone >= TOTAL_TARGETS) {
+      // 全部 3 轮完成
+      const secs = Math.round((performance.now() - exTotalStartT) / 1000);
+      exMode = false;
+      holdBar.style.width = "0%";
+      targetIcon.textContent = "🎉";
+      targetText.textContent = "全部完成！";
+      targetStat.textContent =
+        "共完成 " + TOTAL_TARGETS + " 个动作，用时 " + secs + " 秒";
+      speak(praise + " 全部完成！共" + TOTAL_TARGETS + "个动作，用时" + secs + "秒！");
+      return;
+    }
+    const next = EXERCISES[exDone % EXERCISES.length];
+    if (exDone % EXERCISES.length === 0) {
+      // 一轮（5 个动作）完成，进入下一轮
+      const rSecs = Math.round((performance.now() - exRoundStartT) / 1000);
+      exRoundStartT = performance.now();
+      speak(praise + " 第" + (exDone / EXERCISES.length) + "轮完成，用时" +
+        rSecs + "秒！下一轮开始，先做" + next.name);
+    } else {
+      // 正常推进：表扬 + 报下一个动作（语音引导，老人主要靠听）
+      speak(praise + " 下一个动作，" + next.name +
+        (next.hint ? "，" + next.hint : "") + "，保持两秒");
+    }
+    showTarget();
+  }
+}
+
+// 加载模型（手部关键点模型，约 7MB，加载一次后浏览器会缓存）
+async function loadModel() {
+  setStatus("正在下载识别模型（约 7MB，第一次较慢）…");
+  const modelUrl =
+    "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+  );
+  landmarker = await HandLandmarker.createFromOptions(vision, {
+    baseOptions: { modelAssetPath: modelUrl, delegate: "GPU" },
+    runningMode: "VIDEO",
+    numHands: 2,
+  });
+  setStatus("模型就绪 ✓");
+}
+
+async function startCamera() {
+  try {
+    setStatus("正在打开摄像头…");
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 960 } },
+      audio: false,
+    });
+    video.srcObject = stream;
+    await video.play();
+    setStatus("摄像头已开启，识别运行中");
+  } catch (e) {
+    showError("无法打开摄像头：" + e.name +
+      "。请确认已授权摄像头权限。注意：浏览器只在 HTTPS 或 localhost 下开放摄像头权限。");
+    return false;
+  }
+  return true;
+}
+
+function drawLandmarks(hand) {
+  // 关键点连线
+  ctx.strokeStyle = "#2a9d8f";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  for (const [a, b] of HAND_CONNECTIONS) {
+    const p = hand[a], q = hand[b];
+    ctx.moveTo(p.x * canvas.width, p.y * canvas.height);
+    ctx.lineTo(q.x * canvas.width, q.y * canvas.height);
+  }
+  ctx.stroke();
+  // 关键点圆点
+  for (const p of hand) {
+    ctx.beginPath();
+    ctx.arc(p.x * canvas.width, p.y * canvas.height, 6, 0, Math.PI * 2);
+    ctx.fillStyle = "#f4a261";
+    ctx.fill();
+  }
+}
+
+let noHandFrames = 0;   // 连续没检测到手的帧数（约 60 帧后提示用户）
+
+function tick() {
+  if (!running) return;
+  requestAnimationFrame(async () => {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);   // 复位变换后再清屏
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (landmarker && stream) {
+      try {
+        const res = landmarker.detectForVideo(video, performance.now());
+        handCountEl.textContent = res.landmarks.length;
+        // 视频做了镜像显示，画布也水平翻转，保证关键点和画面里的手对齐
+        ctx.save();
+        ctx.setTransform(-1, 0, 0, 1, canvas.width, 0);
+        for (const hand of res.landmarks) drawLandmarks(hand);
+        ctx.restore();
+        // D2：手势判定（只看第一只手；判定用距离，镜像不影响结果）
+        const raw = res.landmarks.length > 0
+          ? classifyGesture(res.landmarks[0])
+          : "无手势";
+        updateGesture(raw);
+        // D3：跟练模式下的进度判定
+        if (exMode) updateExercise();
+        // 连续约 2 秒没检测到手：给用户提示（可能光线暗 / 手太远 / 没伸进画面）
+        if (res.landmarks.length === 0) {
+          noHandFrames++;
+          if (noHandFrames === 60) {
+            setStatus("没检测到手：请把手掌完整伸入画面，靠近一点，光线亮一点");
+          }
+        } else {
+          noHandFrames = 0;
+        }
+      } catch (e) {
+        // 检测过程出错也要显示出来，而不是让循环静默死掉
+        showError("识别过程出错：" + e.message +
+          "。按 Ctrl+F5 强制刷新后再试。");
+        running = false;
+        return;
+      }
+    }
+
+    // 帧率
+    const now = performance.now();
+    fpsEl.textContent = Math.round(1000 / (now - lastT));
+    lastT = now;
+
+    tick();
+  });
+}
+
+// 共用启动流程：加载模型 + 打开摄像头 + 启动识别循环
+async function ensureRunning() {
+  errBox.style.display = "none";
+  noHandFrames = 0;
+  if (!landmarker) {
+    try { await loadModel(); }
+    catch (e) { showError("模型加载失败：" + e); return false; }
+  }
+  if (!running) {
+    if (!(await startCamera())) return false;
+    running = true;
+    tick();
+  }
+  return true;
+}
+
+document.getElementById("btnStart").addEventListener("click", async () => {
+  // 自由练习模式：只识别手势并播报，不跟练
+  exMode = false;
+  targetBox.style.display = "none";
+  await ensureRunning();
+});
+
+document.getElementById("btnExercise").addEventListener("click", async () => {
+  // 跟练模式：语音引导 + 保持 2 秒计次 + 3 轮 15 个动作
+  if (await ensureRunning()) beginExercise();
+});
+
+document.getElementById("btnStop").addEventListener("click", () => {
+  running = false;
+  exMode = false;
+  targetBox.style.display = "none";
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  handCountEl.textContent = "0";
+  fpsEl.textContent = "--";
+  setStatus("已停止");
+});
+
+document.getElementById("btnVoice").addEventListener("click", () => {
+  voiceOn = !voiceOn;
+  document.getElementById("btnVoice").textContent =
+    voiceOn ? "🔊 语音提示：开" : "🔇 语音提示：关";
+  if (voiceOn) speak("语音提示已开启");
+});
+</script>
+</body>
+</html>
