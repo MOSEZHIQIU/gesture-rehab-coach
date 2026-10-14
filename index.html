@@ -414,15 +414,36 @@ function classifyGesture(hand) {
 
 // ===== 语音提示（D2，浏览器自带语音合成，零依赖） =====
 // 适老化刚需：老年人视力弱，听到"握拳"比看到文字更友好
+
+// 手机浏览器的发声"解锁"：iOS / 微信内置浏览器要求第一次发声
+// 必须发生在用户点击的处理函数里，之后才允许在别处发声。
+// 在"开始"按钮的点击里提前预热，否则后续语音全部被静音（测试反馈）
+function unlockAudio() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    if (window.speechSynthesis) {
+      const u = new SpeechSynthesisUtterance(" ");
+      u.volume = 0;              // 空句子、零音量，只为解锁，用户听不到
+      speechSynthesis.speak(u);
+    }
+  } catch (e) { /* 音频不可用不阻塞主流程 */ }
+}
+
 function speak(text) {
   if (!voiceOn || !window.speechSynthesis) return;
   speechSynthesis.cancel();                    // 打断上一条，保证播报实时
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "zh-CN";
-  u.rate = 0.95;                               // 稍慢语速，老年人友好
-  const zh = speechSynthesis.getVoices().find(v => v.lang.startsWith("zh"));
-  if (zh) u.voice = zh;
-  speechSynthesis.speak(u);
+  // iOS 的坑：cancel 后立刻 speak 会被丢弃，隔一小拍再播（50ms 人耳无感）
+  setTimeout(() => {
+    if (!voiceOn) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "zh-CN";
+    u.rate = 0.95;                             // 稍慢语速，老年人友好
+    u.volume = 1;
+    const zh = speechSynthesis.getVoices().find(v => v.lang.startsWith("zh"));
+    if (zh) u.voice = zh;
+    speechSynthesis.speak(u);
+  }, 50);
 }
 
 // 取手势的纯文字名（去掉表情符号）："✊ 握拳" → "握拳"
@@ -484,9 +505,17 @@ let exRoundStartT = 0;       // 本轮（每 5 个动作）开始时间
 
 // 成功音效：浏览器合成一个短促的高音"叮"，零音频文件依赖
 let audioCtx = null;
+
+// 预加载语音库：iOS 上 getVoices() 首次调用常返回空数组，
+// 需要等 voiceschanged 事件后才拿到中文语音（移动端无声音排查点）
+if (window.speechSynthesis) {
+  speechSynthesis.getVoices();
+  speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+}
 function playDing() {
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();  // 移动端自动播放策略
     const o = audioCtx.createOscillator();
     const g = audioCtx.createGain();
     o.type = "sine";
@@ -681,6 +710,11 @@ function tick() {
 async function ensureRunning() {
   errBox.style.display = "none";
   noHandFrames = 0;
+  unlockAudio();   // 必须在按钮点击里调用：解锁手机浏览器的发声限制
+  if (!window.speechSynthesis) {
+    // 少数浏览器（如安卓微信旧内核）不支持语音合成：降级为文字+音效
+    setStatus("当前浏览器不支持语音播报，请跟随屏幕文字提示练习");
+  }
   if (!landmarker) {
     try { await loadModel(); }
     catch (e) { showError("模型加载失败：" + e); return false; }
