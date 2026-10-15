@@ -3,13 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AI 手势康复操教练（原型 v0.7.3）</title>
+<title>AI 手势康复操教练（原型 v0.7.4）</title>
 <!-- D7 PWA：可"添加到主屏幕"独立运行；首次联网打开后，之后断网也能用 -->
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="theme-color" content="#155e59">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<script>
+// 加载看门狗：主程序 20 秒内没就绪，就明确告诉用户原因——
+// 而不是页面静静躺着、点什么都没反应（曾因 CDN 故障整页瘫痪无法定位）
+setTimeout(function () {
+  if (!window.__appReady) {
+    var el = document.getElementById("sysmsg");
+    if (el) el.textContent =
+      "程序加载失败：首次打开需要联网，请检查网络后刷新重试（页面版本 v0.7.4）";
+  }
+}, 20000);
+</script>
 <style>
   /* ============ 适老化设计基调（D4 会继续细化） ============
      大字、高对比、少层级、大按钮 —— 这是本作品的差异化卖点之一 */
@@ -273,7 +284,7 @@
 
 <header>
   <h1>🤲 AI 手势康复操教练</h1>
-  <p>原型 v0.7.3 —— 语音引导 + 左右手/训练量设置 + 离线可用：任何浏览器都能发声、数据只存本机</p>
+  <p>原型 v0.7.4 —— 语音引导 + 左右手/训练量设置 + 离线可用：任何浏览器都能发声、数据只存本机</p>
 </header>
 
 <main>
@@ -330,7 +341,7 @@
     <button id="btnVoice">🔊 语音提示：开</button>
   </div>
 
-  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.3）</div>
+  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.4）</div>
 
   <div class="error-box" id="errBox"></div>
 
@@ -384,8 +395,9 @@
  * D2 将在此基础上写"手势判定规则"
  * 注意：0.10.14 只有 ESM 版（vision_bundle.mjs），故用模块导入
  * ============================================================ */
-import { FilesetResolver, HandLandmarker } from
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+// MediaPipe 库自托管：vision_bundle.mjs + wasm 全部随站分发，
+// 页面零外部 CDN 依赖（jsdelivr 在国内时好时坏，曾导致整页无响应）
+import { FilesetResolver, HandLandmarker } from "./vision_bundle.mjs";
 
 const video   = document.getElementById("video");
 const canvas  = document.getElementById("canvas");
@@ -811,9 +823,7 @@ function updateExercise() {
 // 防翻车），失败或超时自动回退 Google 官方源——双重保险；
 // 超时保护：手机网络慢时不能干等，30 秒无结果就换源
 async function loadModel() {
-  const vision = await FilesetResolver.forVisionTasks(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
-  );
+  const vision = await FilesetResolver.forVisionTasks("./");
   const tryLoad = (modelUrl) => HandLandmarker.createFromOptions(vision, {
     baseOptions: { modelAssetPath: modelUrl, delegate: "GPU" },
     runningMode: "VIDEO",
@@ -1225,6 +1235,8 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   });
 }
+
+window.__appReady = true;   // 通知加载看门狗：主程序全部就绪
 </script>
 </body>
 </html>
