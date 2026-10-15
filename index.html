@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AI 手势康复操教练（原型 v0.6）</title>
+<title>AI 手势康复操教练（原型 v0.6.1）</title>
 <style>
   /* ============ 适老化设计基调（D4 会继续细化） ============
      大字、高对比、少层级、大按钮 —— 这是本作品的差异化卖点之一 */
@@ -241,7 +241,7 @@
 
 <header>
   <h1>🤲 AI 手势康复操教练</h1>
-  <p>原型 v0.6 —— 语音引导 + 训练记录：任何浏览器都能发声、数据只存本机</p>
+  <p>原型 v0.6.1 —— 语音引导 + 训练记录：任何浏览器都能发声、数据只存本机</p>
 </header>
 
 <main>
@@ -282,7 +282,7 @@
     <button id="btnVoice">🔊 语音提示：开</button>
   </div>
 
-  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。</div>
+  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.6.1）</div>
 
   <div class="error-box" id="errBox"></div>
 
@@ -522,10 +522,12 @@ function unlockAudio() {
 }
 
 // 启动时预加载并解码全部语音片段（解码不需要用户手势，播放才需要）
+// ?v=061：每次改语音包就换这个号，防止微信/浏览器缓存旧片段
+const AUDIO_CACHE_VER = "v=061";
 async function loadAudioPieces() {
   const names = Object.keys(AUDIO_PIECES);
   const results = await Promise.allSettled(names.map(async (name) => {
-    const res = await fetch("audio/" + name + ".mp3");
+    const res = await fetch("audio/" + name + ".mp3?" + AUDIO_CACHE_VER);
     if (!res.ok) throw new Error(name + " " + res.status);
     audioBuffers[name] = await audioCtx.decodeAudioData(await res.arrayBuffer());
   }));
@@ -723,6 +725,12 @@ function updateExercise() {
       const todayN = history.filter(e => dateKey(e.t) === dateKey(Date.now())).length;
       const tail = audioBuffers.finish4 && audioBuffers.ci
         ? ["finish4", ...numParts(todayN), "ci"] : [];
+      if (!tail.length) {
+        // 状态行直接说出原因，方便定位：是语音包不完整还是页面版本旧
+        setStatus(audioReady
+          ? "收尾语音缺片段（finish4/ci 未加载），请刷新页面重试"
+          : "语音包加载不完整，收尾语音已跳过，请刷新页面重试");
+      }
       speak([praisePiece, "finish1", ...numParts(TOTAL_TARGETS),
         "finish2", ...numParts(secs), "finish3", ...tail]);
       return;
