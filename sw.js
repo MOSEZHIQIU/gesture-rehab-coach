@@ -1,9 +1,10 @@
 // 手护健康 · Service Worker（离线可用）
 // 策略：
-//   页面 HTML  —— 网络优先（保证每次更新及时生效），断网时回退缓存
-//   语音/图标  —— 缓存优先（文件名带 ?v= 版本号，改版本号自动取新文件）
-//   跨域资源   —— 模型/wasm 从 CDN 加载，首次成功后进缓存，之后断网也能识别
-const CACHE_NAME = "handrehab-v1";
+//   页面/代码/模型  —— 网络优先（保证更新及时生效、大文件不会被半截缓存坑），
+//                       断网时回退缓存
+//   语音/图标        —— 缓存优先（文件名带 ?v= 版本号，改版本号自动取新文件）
+//   跨域资源         —— 网络优先 + 运行时缓存
+const CACHE_NAME = "handrehab-v2";   // v2：旧版缓存过模型分段下载的半截文件，必须整库废弃
 const CORE = ["./", "./index.html", "./manifest.json",
   "./icon-192.png", "./icon-512.png"];
 
@@ -52,9 +53,11 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // 同源：HTML 网络优先（及时更新），其余缓存优先（离线即时可用）
-  // 只缓存完整的 200 响应，分段响应（206）不缓存
-  const isHtml = url.pathname.endsWith("/") || url.pathname.endsWith("index.html");
+  // 同源：HTML/代码/模型 网络优先（及时更新、防止半截缓存坑模型加载），
+  // 语音/图标 缓存优先（离线即时可用）。只缓存完整的 200 响应，分段（206）不缓存
+  const isCritical = url.pathname.endsWith("/") ||
+    url.pathname.endsWith("index.html") ||
+    /\.(task|wasm|mjs|js)$/i.test(url.pathname);
   e.respondWith(
     caches.match(e.request).then((hit) => {
       const fetched = fetch(e.request)
@@ -67,7 +70,7 @@ self.addEventListener("fetch", (e) => {
           return res;
         })
         .catch(() => hit);
-      return isHtml ? fetched : (hit || fetched);
+      return isCritical ? fetched : (hit || fetched);
     })
   );
 });
