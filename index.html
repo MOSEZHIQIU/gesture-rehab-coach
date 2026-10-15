@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AI 手势康复操教练（原型 v0.6.1）</title>
+<title>AI 手势康复操教练（原型 v0.6.2）</title>
 <style>
   /* ============ 适老化设计基调（D4 会继续细化） ============
      大字、高对比、少层级、大按钮 —— 这是本作品的差异化卖点之一 */
@@ -241,7 +241,7 @@
 
 <header>
   <h1>🤲 AI 手势康复操教练</h1>
-  <p>原型 v0.6.1 —— 语音引导 + 训练记录：任何浏览器都能发声、数据只存本机</p>
+  <p>原型 v0.6.2 —— 语音引导 + 训练记录：任何浏览器都能发声、数据只存本机</p>
 </header>
 
 <main>
@@ -282,7 +282,7 @@
     <button id="btnVoice">🔊 语音提示：开</button>
   </div>
 
-  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.6.1）</div>
+  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.6.2）</div>
 
   <div class="error-box" id="errBox"></div>
 
@@ -501,6 +501,8 @@ const AUDIO_PIECES = {
   finish1: "全部完成！共",
   finish2: "个动作，用时",
   finish3: "秒！",
+  finish4: "今天共练了",
+  ci: "次",
   di: "第",
   round1: "轮完成，用时",
   round2: "秒！下一轮开始，先做",
