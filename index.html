@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AI 手势康复操教练（原型 v0.1）</title>
+<title>AI 手势康复操教练（原型 v0.6）</title>
 <style>
   /* ============ 适老化设计基调（D4 会继续细化） ============
      大字、高对比、少层级、大按钮 —— 这是本作品的差异化卖点之一 */
@@ -171,6 +171,51 @@
     .guide-row { grid-template-columns: repeat(2, 1fr); }
   }
 
+  /* ============ D5：历史记录与训练报告（数据只存本机，零上传） ============
+     适老化：数字就是全部信息——不用悬停提示（老人不悬停、手机没有悬停），
+     每个条形旁边直接写次数，颜色不承担任何信息 */
+  .history { margin-top: 24px; text-align: center; }
+  #btnHistory {
+    background: #fff;
+    color: var(--deep);
+    border: 3px solid var(--teal);
+  }
+  #btnHistory:hover { background: #e8f3f1; }
+  .history-panel {
+    margin-top: 16px;
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    text-align: left;
+  }
+  .his-title { font-size: 26px; font-weight: 700; color: var(--deep); text-align: center; }
+  .his-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
+  .his-card { background: #f7faf9; border-radius: 12px; padding: 12px 4px; text-align: center; }
+  .his-num { font-size: 36px; font-weight: 700; color: var(--teal); line-height: 1.2; }
+  .his-label { font-size: 19px; color: #5c6f6d; margin-top: 2px; }
+  .his-sub { font-size: 23px; font-weight: 700; color: var(--deep); margin: 20px 0 8px; }
+  /* 每个动作的练习次数：横向条形列表，长度=数量、文字=准确值 */
+  .his-bar-row { display: flex; align-items: center; gap: 12px; margin: 10px 0; }
+  .his-bar-name { font-size: 22px; min-width: 132px; text-align: right; }
+  .his-bar-track { flex: 1; height: 22px; background: #e9efee; border-radius: 999px; overflow: hidden; }
+  .his-bar-fill { height: 100%; background: var(--teal); border-radius: 999px; }
+  .his-bar-num { font-size: 22px; color: var(--deep); min-width: 72px; }
+  .his-item {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+    padding: 10px 4px; border-bottom: 1px solid #e9efee; font-size: 20px;
+  }
+  .his-item-date { color: var(--deep); font-weight: 700; white-space: nowrap; }
+  .his-item-info { color: #5c6f6d; text-align: right; }
+  .his-empty { text-align: center; color: #7a8b89; font-size: 20px; padding: 12px 0; }
+  .his-note { text-align: center; color: #7a8b89; font-size: 18px; margin-top: 14px; }
+  #btnClear { display: block; margin: 16px auto 0; font-size: 22px; padding: 12px 32px; background: #fdecea; color: #b3402f; }
+  #btnClear:hover { background: #fbd9d4; }
+  @media (max-width: 720px) {
+    .his-summary { grid-template-columns: repeat(2, 1fr); }
+    .his-bar-name { min-width: 108px; font-size: 20px; }
+  }
+
   footer {
     margin: 32px 16px 24px;
     text-align: center;
@@ -196,7 +241,7 @@
 
 <header>
   <h1>🤲 AI 手势康复操教练</h1>
-  <p>原型 v0.5 —— 预生成语音包：任何浏览器都能发声、离线可用</p>
+  <p>原型 v0.6 —— 语音引导 + 训练记录：任何浏览器都能发声、数据只存本机</p>
 </header>
 
 <main>
@@ -249,6 +294,25 @@
       <div class="guide-item"><div class="guide-icon">🤏</div><div class="guide-name">对捏</div><div class="guide-tip">拇指食指尖相碰</div></div>
       <div class="guide-item"><div class="guide-icon">✌️</div><div class="guide-name">剪刀手</div><div class="guide-tip">两指伸直并分开</div></div>
       <div class="guide-item"><div class="guide-icon">👍</div><div class="guide-name">竖大拇指</div><div class="guide-tip">拇指竖起四指握</div></div>
+    </div>
+  </div>
+
+  <div class="history">
+    <button id="btnHistory">📊 训练记录</button>
+    <div id="historyPanel" class="history-panel" style="display:none">
+      <div class="his-title">📊 我的训练报告</div>
+      <div class="his-summary">
+        <div class="his-card"><div class="his-num" id="hisTimes">0</div><div class="his-label">训练次数</div></div>
+        <div class="his-card"><div class="his-num" id="hisMins">0</div><div class="his-label">累计分钟</div></div>
+        <div class="his-card"><div class="his-num" id="hisStreak">0</div><div class="his-label">连续天数</div></div>
+        <div class="his-card"><div class="his-num" id="hisActions">0</div><div class="his-label">完成动作</div></div>
+      </div>
+      <div class="his-sub">每个动作练了多少次</div>
+      <div id="hisBars"></div>
+      <div class="his-sub">最近记录</div>
+      <div id="hisList"></div>
+      <div class="his-note">🔒 记录只保存在您自己的手机/电脑里，不上传任何地方</div>
+      <button id="btnClear">🗑 清除全部记录</button>
     </div>
   </div>
 
@@ -609,6 +673,7 @@ function beginExercise() {
   exMode = true;
   exDone = 0;
   exHold = 0;
+  exCounts = {};             // D5：重置本次每个动作的完成计数
   exTotalStartT = performance.now();
   exRoundStartT = exTotalStartT;
   targetBox.style.display = "block";
@@ -635,6 +700,7 @@ function updateExercise() {
     // ✅ 一个动作完成
     exDone++;
     exHold = 0;
+    exCounts[cur.name] = (exCounts[cur.name] || 0) + 1;   // D5：动作计数
     playDing();
     const praise = PRAISES[(exDone - 1) % PRAISES.length];
     const praisePiece = PRAISE_PIECES[(exDone - 1) % PRAISE_PIECES.length];
@@ -648,8 +714,17 @@ function updateExercise() {
       targetText.textContent = "全部完成！";
       targetStat.textContent =
         "共完成 " + TOTAL_TARGETS + " 个动作，用时 " + secs + " 秒";
+      // D5：写入历史记录（只存本机，零上传），并刷新报告
+      history.push({ t: Date.now(), secs, done: TOTAL_TARGETS, counts: { ...exCounts } });
+      if (history.length > HISTORY_MAX) history.splice(0, history.length - HISTORY_MAX);
+      saveHistory();
+      renderReport();
+      // 语音收尾加一句"今天共练了 X 次"（新片段没加载到则退回原句）
+      const todayN = history.filter(e => dateKey(e.t) === dateKey(Date.now())).length;
+      const tail = audioBuffers.finish4 && audioBuffers.ci
+        ? ["finish4", ...numParts(todayN), "ci"] : [];
       speak([praisePiece, "finish1", ...numParts(TOTAL_TARGETS),
-        "finish2", ...numParts(secs), "finish3"]);
+        "finish2", ...numParts(secs), "finish3", ...tail]);
       return;
     }
     const next = EXERCISES[exDone % EXERCISES.length];
@@ -796,6 +871,151 @@ async function ensureRunning() {
   return true;
 }
 
+// ===== D5：历史记录与训练报告 =====
+// 每次跟练结束（完整 15 个或中途停止）都写一条记录到 localStorage；
+// 零上传——与"本地推理"的隐私架构一致，也是适老化的信任基础
+const HISTORY_KEY = "handrehab_history_v1";
+const HISTORY_MAX = 200;      // 最多保留 200 条，防止存储无限增长
+let history = [];             // 内存中的记录列表：[{t, secs, done, counts}]
+let exCounts = {};            // 本次跟练每个动作的完成次数（结束时随记录保存）
+
+function loadHistory() {
+  try {
+    history = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    if (!Array.isArray(history)) history = [];
+  } catch (e) { history = []; }   // 数据损坏时从头开始，不影响主流程
+}
+
+function saveHistory() {
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (e) {}
+}
+
+// 日期键（"2026-10-15"）：统计连续天数和"今天练了几次"用
+function dateKey(ms) {
+  const d = new Date(ms);
+  return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+}
+
+function fmtSecs(s) {
+  const m = Math.floor(s / 60);
+  return m > 0 ? m + " 分 " + (s % 60) + " 秒" : s + " 秒";
+}
+
+// 连续训练天数：从今天往前数（今天没练就从昨天开始算，中断即停）
+function computeStreak(days) {
+  const d = new Date();
+  let k = dateKey(d.getTime());
+  if (!days.has(k)) { d.setDate(d.getDate() - 1); k = dateKey(d.getTime()); }
+  let s = 0;
+  while (days.has(k)) {
+    s++;
+    d.setDate(d.getDate() - 1);
+    k = dateKey(d.getTime());
+  }
+  return s;
+}
+
+function renderBars(g) {
+  const box = document.getElementById("hisBars");
+  const max = Math.max(1, ...Object.values(g));
+  box.innerHTML = "";
+  for (const e of EXERCISES) {
+    const count = g[e.piece];
+    const row = document.createElement("div");
+    row.className = "his-bar-row";
+    const name = document.createElement("div");
+    name.className = "his-bar-name";
+    name.textContent = e.icon + " " + e.name;
+    const track = document.createElement("div");
+    track.className = "his-bar-track";
+    const fill = document.createElement("div");
+    fill.className = "his-bar-fill";
+    fill.style.width = count ? Math.max(8, Math.round(count / max * 100)) + "%" : "0%";
+    track.appendChild(fill);
+    const num = document.createElement("div");
+    num.className = "his-bar-num";
+    num.textContent = count + " 次";
+    row.appendChild(name); row.appendChild(track); row.appendChild(num);
+    box.appendChild(row);
+  }
+}
+
+function renderList() {
+  const box = document.getElementById("hisList");
+  box.innerHTML = "";
+  if (history.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "his-empty";
+    empty.textContent = "还没有记录——完成一次跟练，这里就有啦";
+    box.appendChild(empty);
+    return;
+  }
+  for (const e of history.slice(-10).reverse()) {
+    const row = document.createElement("div");
+    row.className = "his-item";
+    const d = new Date(e.t);
+    const left = document.createElement("div");
+    left.className = "his-item-date";
+    left.textContent = (d.getMonth() + 1) + "月" + d.getDate() + "日 " +
+      String(d.getHours()).padStart(2, "0") + ":" +
+      String(d.getMinutes()).padStart(2, "0");
+    const right = document.createElement("div");
+    right.className = "his-item-info";
+    right.textContent = (e.done >= TOTAL_TARGETS ? "✅ " : "⏸ ") +
+      "完成 " + e.done + " 个动作 · 用时 " + fmtSecs(e.secs);
+    row.appendChild(left); row.appendChild(right);
+    box.appendChild(row);
+  }
+}
+
+function renderReport() {
+  let secs = 0, done = 0;
+  const days = new Set();
+  const g = { g1: 0, g2: 0, g3: 0, g4: 0, g5: 0 };
+  for (const e of history) {
+    secs += e.secs || 0;
+    done += e.done || 0;
+    days.add(dateKey(e.t));
+    for (const k in g) g[k] += (e.counts && e.counts[k]) || 0;
+  }
+  document.getElementById("hisTimes").textContent = history.length;
+  document.getElementById("hisMins").textContent = Math.floor(secs / 60);
+  document.getElementById("hisStreak").textContent = computeStreak(days);
+  document.getElementById("hisActions").textContent = done;
+  renderBars(g);
+  renderList();
+}
+
+document.getElementById("btnHistory").addEventListener("click", () => {
+  const panel = document.getElementById("historyPanel");
+  const show = panel.style.display === "none";
+  panel.style.display = show ? "block" : "none";
+  document.getElementById("btnHistory").textContent =
+    show ? "📊 训练记录 ▴" : "📊 训练记录";
+  renderReport();
+});
+
+// 清除记录：两步确认，防止误触（老年人误触概率高，不能点一下就删光）
+let clearArmed = false;
+document.getElementById("btnClear").addEventListener("click", () => {
+  const btn = document.getElementById("btnClear");
+  if (!clearArmed) {
+    clearArmed = true;
+    btn.textContent = "⚠️ 再点一次，确认清除";
+    setTimeout(() => {
+      clearArmed = false;
+      btn.textContent = "🗑 清除全部记录";
+    }, 4000);
+    return;
+  }
+  history = [];
+  saveHistory();
+  renderReport();
+  clearArmed = false;
+  btn.textContent = "🗑 清除全部记录";
+  setStatus("历史记录已清除");
+});
+
 document.getElementById("btnStart").addEventListener("click", async () => {
   // 自由练习模式：只识别手势并播报，不跟练
   exMode = false;
@@ -809,6 +1029,14 @@ document.getElementById("btnExercise").addEventListener("click", async () => {
 });
 
 document.getElementById("btnStop").addEventListener("click", () => {
+  // D5：跟练中途停止也算一次记录（报告里如实显示"完成 X / 15"）
+  if (exMode && exDone > 0) {
+    const secs = Math.round((performance.now() - exTotalStartT) / 1000);
+    history.push({ t: Date.now(), secs, done: exDone, counts: { ...exCounts } });
+    if (history.length > HISTORY_MAX) history.splice(0, history.length - HISTORY_MAX);
+    saveHistory();
+    renderReport();
+  }
   running = false;
   exMode = false;
   targetBox.style.display = "none";
@@ -830,6 +1058,8 @@ document.getElementById("btnVoice").addEventListener("click", () => {
 // （解码不需要用户手势，播放才需要——"解锁"在按钮点击时完成）
 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 loadAudioPieces();
+loadHistory();
+renderReport();
 </script>
 </body>
 </html>
