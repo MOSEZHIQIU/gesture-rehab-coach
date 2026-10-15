@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AI 手势康复操教练（原型 v0.7.0）</title>
+<title>AI 手势康复操教练（原型 v0.7.1）</title>
 <!-- D7 PWA：可"添加到主屏幕"独立运行；首次联网打开后，之后断网也能用 -->
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -273,7 +273,7 @@
 
 <header>
   <h1>🤲 AI 手势康复操教练</h1>
-  <p>原型 v0.7.0 —— 语音引导 + 左右手/训练量设置 + 离线可用：任何浏览器都能发声、数据只存本机</p>
+  <p>原型 v0.7.1 —— 语音引导 + 左右手/训练量设置 + 离线可用：任何浏览器都能发声、数据只存本机</p>
 </header>
 
 <main>
@@ -330,7 +330,7 @@
     <button id="btnVoice">🔊 语音提示：开</button>
   </div>
 
-  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.0）</div>
+  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.1）</div>
 
   <div class="error-box" id="errBox"></div>
 
@@ -874,11 +874,11 @@ function tick() {
     if (landmarker && stream) {
       try {
         const res = landmarker.detectForVideo(video, performance.now());
-        // D7 训练手过滤：MediaPipe 的 handedness 是按"镜像输入图"训练的
-        // （自拍视角假设）。我们喂的是摄像头原始帧（未镜像），显示层才镜像，
-        // 所以标签与用户真实左右手相反：标签 "Left" = 用户右手、标签
-        // "Right" = 用户左手。手机实测若左右反了，把 HAND_SWAP 改成 false。
-        const HAND_SWAP = true;
+        // D7 训练手过滤：MediaPipe 的 handedness 标签按"镜像输入图"约定训练，
+        // 但实测（微信 Android 前置摄像头）标签直接对应真实左右手：
+        // 标签 "Left" = 用户左手、"Right" = 用户右手，无需翻转。
+        // 若换设备实测左右反了，把 HAND_SWAP 改回 true。
+        const HAND_SWAP = false;
         const handed = res.handednesses || res.handedness || [];
         let hands = res.landmarks;
         if (hands.length && handed.length) {
@@ -1174,13 +1174,13 @@ document.getElementById("handLeft").addEventListener("click", () => {
   trainHand = "L";
   saveSettings();
   renderSettings();
-  setStatus("训练手已切换为左手（画面里你的左手在左侧）");
+  setStatus("训练手已切换为左手");
 });
 document.getElementById("handRight").addEventListener("click", () => {
   trainHand = "R";
   saveSettings();
   renderSettings();
-  setStatus("训练手已切换为右手（画面里你的右手在右侧）");
+  setStatus("训练手已切换为右手");
 });
 function setRounds(n) {
   if (exMode) return;   // 跟练中按钮已禁用，双保险
