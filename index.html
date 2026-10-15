@@ -700,7 +700,7 @@ function updateExercise() {
     // ✅ 一个动作完成
     exDone++;
     exHold = 0;
-    exCounts[cur.name] = (exCounts[cur.name] || 0) + 1;   // D5：动作计数
+    exCounts[cur.piece] = (exCounts[cur.piece] || 0) + 1;   // D5：动作计数（键=语音片段名 g1-g5，与报告一致）
     playDing();
     const praise = PRAISES[(exDone - 1) % PRAISES.length];
     const praisePiece = PRAISE_PIECES[(exDone - 1) % PRAISE_PIECES.length];
@@ -976,7 +976,12 @@ function renderReport() {
     secs += e.secs || 0;
     done += e.done || 0;
     days.add(dateKey(e.t));
-    for (const k in g) g[k] += (e.counts && e.counts[k]) || 0;
+    for (const k in g) {
+      g[k] += (e.counts && e.counts[k]) || 0;
+      // 兼容修复前的旧记录：早期版本按动作名（"握拳"）存键，这里两种键都认
+      const ex = EXERCISES.find(x => x.piece === k);
+      g[k] += (e.counts && ex && e.counts[ex.name]) || 0;
+    }
   }
   document.getElementById("hisTimes").textContent = history.length;
   document.getElementById("hisMins").textContent = Math.floor(secs / 60);
