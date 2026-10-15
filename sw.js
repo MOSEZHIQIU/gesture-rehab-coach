@@ -27,9 +27,17 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
+
+  // 分段（Range）请求必须直连网络：缓存里存的是整文件或前一段字节，
+  // 拿错字节给加载器会把它卡死（模型加载器会用 Range 读文件）
+  if (e.request.headers.get("Range")) {
+    e.respondWith(fetch(e.request));
+    return;
+  }
+
   const url = new URL(e.request.url);
 
-  // 跨域（MediaPipe wasm、模型文件等 CDN 资源）：网络优先 + 运行时缓存
+  // 跨域（MediaPipe wasm 等 CDN 资源）：网络优先 + 运行时缓存
   if (url.origin !== location.origin) {
     e.respondWith(
       fetch(e.request)
@@ -45,12 +53,13 @@ self.addEventListener("fetch", (e) => {
   }
 
   // 同源：HTML 网络优先（及时更新），其余缓存优先（离线即时可用）
+  // 只缓存完整的 200 响应，分段响应（206）不缓存
   const isHtml = url.pathname.endsWith("/") || url.pathname.endsWith("index.html");
   e.respondWith(
     caches.match(e.request).then((hit) => {
       const fetched = fetch(e.request)
         .then((res) => {
-          if (res.ok) {
+          if (res.ok && res.status === 200) {
             caches.open(CACHE_NAME)
               .then((c) => c.put(e.request, res.clone()))
               .catch(() => {});
