@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AI 手势康复操教练（原型 v0.7.4）</title>
+<title>AI 手势康复操教练（原型 v0.7.5）</title>
 <!-- D7 PWA：可"添加到主屏幕"独立运行；首次联网打开后，之后断网也能用 -->
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -17,7 +17,7 @@ setTimeout(function () {
   if (!window.__appReady) {
     var el = document.getElementById("sysmsg");
     if (el) el.textContent =
-      "程序加载失败：首次打开需要联网，请检查网络后刷新重试（页面版本 v0.7.4）";
+      "程序加载失败：首次打开需要联网，请检查网络后刷新重试（页面版本 v0.7.5）";
   }
 }, 20000);
 </script>
@@ -284,7 +284,7 @@ setTimeout(function () {
 
 <header>
   <h1>🤲 AI 手势康复操教练</h1>
-  <p>原型 v0.7.4 —— 语音引导 + 左右手/训练量设置 + 离线可用：任何浏览器都能发声、数据只存本机</p>
+  <p>原型 v0.7.5 —— 语音引导 + 左右手/训练量设置 + 离线可用：任何浏览器都能发声、数据只存本机</p>
 </header>
 
 <main>
@@ -341,7 +341,7 @@ setTimeout(function () {
     <button id="btnVoice">🔊 语音提示：开</button>
   </div>
 
-  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.4）</div>
+  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.5）</div>
 
   <div class="error-box" id="errBox"></div>
 
@@ -833,7 +833,9 @@ async function loadModel() {
     setTimeout(() => rej(new Error("超时")), ms));
   setStatus("正在下载识别模型（约 7MB，第一次较慢）…");
   try {
-    landmarker = await Promise.race([tryLoad("./hand_landmarker.task"), wait(30000)]);
+    // ?v=2 绕开旧版缓存里可能存的半截模型文件（脏缓存曾导致加载必失败）
+    landmarker = await Promise.race(
+      [tryLoad("./hand_landmarker.task?v=2"), wait(30000)]);
   } catch (e) {
     setStatus("本地模型加载失败，改用备用源重试…");
     try {
