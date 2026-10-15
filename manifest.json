@@ -1,0 +1,16 @@
+{
+  "name": "手护健康——AI 手势康复操教练",
+  "short_name": "手护健康",
+  "description": "AI 手势康复操教练：摄像头识别手部动作，语音引导老人跟练康复操，识别全部在本机完成、数据只存本机",
+  "lang": "zh-CN",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7faf9",
+  "theme_color": "#155e59",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

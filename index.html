@@ -3,7 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AI 手势康复操教练（原型 v0.6.2）</title>
+<title>AI 手势康复操教练（原型 v0.7.0）</title>
+<!-- D7 PWA：可"添加到主屏幕"独立运行；首次联网打开后，之后断网也能用 -->
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#155e59">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <style>
   /* ============ 适老化设计基调（D4 会继续细化） ============
      大字、高对比、少层级、大按钮 —— 这是本作品的差异化卖点之一 */
@@ -120,6 +126,32 @@
   #btnStop:hover { background: #dde7e5; }
   #btnExercise { background: var(--gold); color: #fff; }
   #btnExercise:hover { background: #e8924b; }
+
+  /* D7 训练设置：哪只手 + 练几轮（大按钮分段选择，老人看得清、点得准） */
+  .settings {
+    margin-top: 24px;
+    background: #fff;
+    border-radius: 16px;
+    padding: 18px 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+  }
+  .set-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .set-row + .set-row { margin-top: 14px; }
+  .set-label { font-size: 24px; font-weight: 700; color: var(--deep); min-width: 130px; }
+  .set-btn {
+    font-size: 24px;
+    padding: 12px 28px;
+    background: #e9efee;
+    color: var(--deep);
+    border-radius: 999px;
+    border: none;
+    cursor: pointer;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .set-btn.on { background: var(--teal); color: #fff; }
+  .set-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .set-tip { font-size: 18px; color: #7a8b89; margin-left: 6px; }
 
   .hint {
     margin-top: 24px;
@@ -241,7 +273,7 @@
 
 <header>
   <h1>🤲 AI 手势康复操教练</h1>
-  <p>原型 v0.6.2 —— 语音引导 + 训练记录：任何浏览器都能发声、数据只存本机</p>
+  <p>原型 v0.7.0 —— 语音引导 + 左右手/训练量设置 + 离线可用：任何浏览器都能发声、数据只存本机</p>
 </header>
 
 <main>
@@ -275,6 +307,22 @@
     <div class="target-stat" id="targetStat">第 1 轮 · 已完成 0 / 15</div>
   </div>
 
+  <div class="settings">
+    <div class="set-row">
+      <span class="set-label">🖐 训练手</span>
+      <button id="handLeft" class="set-btn">左手</button>
+      <button id="handRight" class="set-btn">右手</button>
+      <span class="set-tip">只认这一只手，另一只手休息</span>
+    </div>
+    <div class="set-row">
+      <span class="set-label">💪 训练量</span>
+      <button id="round1" class="set-btn">1 轮</button>
+      <button id="round2" class="set-btn">2 轮</button>
+      <button id="round3" class="set-btn">3 轮</button>
+      <span class="set-tip">1 轮 5 个动作约 1 分钟，练不动可减量</span>
+    </div>
+  </div>
+
   <div class="btn-row">
     <button id="btnStart">📷 开始识别</button>
     <button id="btnExercise">🏋️ 开始跟练</button>
@@ -282,7 +330,7 @@
     <button id="btnVoice">🔊 语音提示：开</button>
   </div>
 
-  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.6.2）</div>
+  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.0）</div>
 
   <div class="error-box" id="errBox"></div>
 
@@ -633,8 +681,11 @@ const EXERCISES = [
 const GESTURE_PIECE = {};   // 手势名 -> 语音片段名（自由练习播报用）
 EXERCISES.forEach(e => { GESTURE_PIECE[e.name] = e.piece; });
 const PRAISE_PIECES = ["praise1", "praise2", "praise3", "praise4", "praise5"];
-const ROUNDS        = 3;
-const TOTAL_TARGETS = EXERCISES.length * ROUNDS;  // 15 个动作
+// D7 训练设置：轮数可选（1/2/3 轮），每轮 5 个动作；选择记忆在本机
+const ROUND_OPTIONS = [1, 2, 3];
+let curRounds = 3;
+let TOTAL_TARGETS = EXERCISES.length * curRounds;  // 默认 15，随设置变化
+let trainHand = "R";   // 训练哪只手："L"=用户左手 "R"=用户右手（默认右手）
 const HOLD_FRAMES   = 60;                         // 保持约 2 秒（60 帧）才算完成
 const PRAISES = ["真棒！", "做得很好！", "好样的！", "非常标准！", "太厉害了！"];
 
@@ -665,7 +716,7 @@ function playDing() {
 
 function showTarget() {
   const cur = EXERCISES[exDone % EXERCISES.length];
-  const round = Math.min(Math.floor(exDone / EXERCISES.length) + 1, ROUNDS);
+  const round = Math.min(Math.floor(exDone / EXERCISES.length) + 1, curRounds);
   targetIcon.textContent = cur.icon;
   targetText.textContent = cur.name;
   holdBar.style.width = "0%";
@@ -675,6 +726,7 @@ function showTarget() {
 
 function beginExercise() {
   exMode = true;
+  renderSettings();   // D7：跟练中锁定训练量按钮
   exDone = 0;
   exHold = 0;
   exCounts = {};             // D5：重置本次每个动作的完成计数
@@ -713,13 +765,15 @@ function updateExercise() {
       // 全部 3 轮完成
       const secs = Math.round((performance.now() - exTotalStartT) / 1000);
       exMode = false;
+      renderSettings();   // D7：解锁训练量按钮
       holdBar.style.width = "0%";
       targetIcon.textContent = "🎉";
       targetText.textContent = "全部完成！";
       targetStat.textContent =
         "共完成 " + TOTAL_TARGETS + " 个动作，用时 " + secs + " 秒";
       // D5：写入历史记录（只存本机，零上传），并刷新报告
-      history.push({ t: Date.now(), secs, done: TOTAL_TARGETS, counts: { ...exCounts } });
+      history.push({ t: Date.now(), secs, done: TOTAL_TARGETS,
+        targets: TOTAL_TARGETS, counts: { ...exCounts } });
       if (history.length > HISTORY_MAX) history.splice(0, history.length - HISTORY_MAX);
       saveHistory();
       renderReport();
@@ -820,24 +874,41 @@ function tick() {
     if (landmarker && stream) {
       try {
         const res = landmarker.detectForVideo(video, performance.now());
-        handCountEl.textContent = res.landmarks.length;
+        // D7 训练手过滤：MediaPipe 的 handedness 是按"镜像输入图"训练的
+        // （自拍视角假设）。我们喂的是摄像头原始帧（未镜像），显示层才镜像，
+        // 所以标签与用户真实左右手相反：标签 "Left" = 用户右手、标签
+        // "Right" = 用户左手。手机实测若左右反了，把 HAND_SWAP 改成 false。
+        const HAND_SWAP = true;
+        const handed = res.handednesses || res.handedness || [];
+        let hands = res.landmarks;
+        if (hands.length && handed.length) {
+          hands = hands.filter((_, i) => {
+            const cats = handed[i] || [];
+            const label = cats[0] ? cats[0].categoryName : "";
+            if (label !== "Left" && label !== "Right") return true;  // 缺标签时不误伤
+            const isUserRight = HAND_SWAP ? (label === "Left") : (label === "Right");
+            return trainHand === "R" ? isUserRight : !isUserRight;
+          });
+        }
+        handCountEl.textContent = hands.length;
         // 视频做了镜像显示，画布也水平翻转，保证关键点和画面里的手对齐
         ctx.save();
         ctx.setTransform(-1, 0, 0, 1, canvas.width, 0);
-        for (const hand of res.landmarks) drawLandmarks(hand);
+        for (const hand of hands) drawLandmarks(hand);
         ctx.restore();
         // D2：手势判定（只看第一只手；判定用距离，镜像不影响结果）
-        const raw = res.landmarks.length > 0
-          ? classifyGesture(res.landmarks[0])
-          : "无手势";
+        const raw = hands.length > 0 ? classifyGesture(hands[0]) : "无手势";
         updateGesture(raw);
         // D3：跟练模式下的进度判定
         if (exMode) updateExercise();
         // 连续约 2 秒没检测到手：给用户提示（可能光线暗 / 手太远 / 没伸进画面）
-        if (res.landmarks.length === 0) {
+        if (hands.length === 0) {
           noHandFrames++;
           if (noHandFrames === 60) {
-            setStatus("没检测到手：请把手掌完整伸入画面，靠近一点，光线亮一点");
+            setStatus(res.landmarks.length > 0
+              ? "检测到的是另一只手——请伸出" +
+                (trainHand === "R" ? "右手" : "左手") + "（可在上方切换训练手）"
+              : "没检测到手：请把手掌完整伸入画面，靠近一点，光线亮一点");
           }
         } else {
           noHandFrames = 0;
@@ -971,7 +1042,7 @@ function renderList() {
       String(d.getMinutes()).padStart(2, "0");
     const right = document.createElement("div");
     right.className = "his-item-info";
-    right.textContent = (e.done >= TOTAL_TARGETS ? "✅ " : "⏸ ") +
+    right.textContent = (e.done >= (e.targets || 15) ? "✅ " : "⏸ ") +
       "完成 " + e.done + " 个动作 · 用时 " + fmtSecs(e.secs);
     row.appendChild(left); row.appendChild(right);
     box.appendChild(row);
@@ -1047,13 +1118,15 @@ document.getElementById("btnStop").addEventListener("click", () => {
   // D5：跟练中途停止也算一次记录（报告里如实显示"完成 X / 15"）
   if (exMode && exDone > 0) {
     const secs = Math.round((performance.now() - exTotalStartT) / 1000);
-    history.push({ t: Date.now(), secs, done: exDone, counts: { ...exCounts } });
+    history.push({ t: Date.now(), secs, done: exDone,
+      targets: TOTAL_TARGETS, counts: { ...exCounts } });
     if (history.length > HISTORY_MAX) history.splice(0, history.length - HISTORY_MAX);
     saveHistory();
     renderReport();
   }
   running = false;
   exMode = false;
+  renderSettings();   // D7：解锁训练量按钮
   targetBox.style.display = "none";
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1069,12 +1142,73 @@ document.getElementById("btnVoice").addEventListener("click", () => {
   if (voiceOn) speak(["voiceon"]);
 });
 
+// ===== D7 训练设置：训练手 + 训练量（选择记忆在本机，老人不用每次重选） =====
+const SETTINGS_KEY = "handrehab_settings_v1";
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+    if (s.hand === "L" || s.hand === "R") trainHand = s.hand;
+    if (ROUND_OPTIONS.includes(s.rounds)) curRounds = s.rounds;
+  } catch (e) { /* 设置损坏就用默认值 */ }
+  TOTAL_TARGETS = EXERCISES.length * curRounds;
+}
+function saveSettings() {
+  try {
+    localStorage.setItem(SETTINGS_KEY,
+      JSON.stringify({ hand: trainHand, rounds: curRounds }));
+  } catch (e) { /* 存不了就用本次默认值 */ }
+}
+function renderSettings() {
+  document.getElementById("handLeft").classList.toggle("on", trainHand === "L");
+  document.getElementById("handRight").classList.toggle("on", trainHand === "R");
+  for (const n of ROUND_OPTIONS) {
+    document.getElementById("round" + n).classList.toggle("on", curRounds === n);
+  }
+  // 跟练进行中锁定"训练量"：中途改轮数会把本轮计数搞乱
+  const locked = exMode;
+  document.getElementById("round1").disabled = locked;
+  document.getElementById("round2").disabled = locked;
+  document.getElementById("round3").disabled = locked;
+}
+document.getElementById("handLeft").addEventListener("click", () => {
+  trainHand = "L";
+  saveSettings();
+  renderSettings();
+  setStatus("训练手已切换为左手（画面里你的左手在左侧）");
+});
+document.getElementById("handRight").addEventListener("click", () => {
+  trainHand = "R";
+  saveSettings();
+  renderSettings();
+  setStatus("训练手已切换为右手（画面里你的右手在右侧）");
+});
+function setRounds(n) {
+  if (exMode) return;   // 跟练中按钮已禁用，双保险
+  curRounds = n;
+  TOTAL_TARGETS = EXERCISES.length * n;
+  saveSettings();
+  renderSettings();
+  setStatus("训练量设为 " + n + " 轮（共 " + TOTAL_TARGETS + " 个动作），下次跟练生效");
+}
+document.getElementById("round1").addEventListener("click", () => setRounds(1));
+document.getElementById("round2").addEventListener("click", () => setRounds(2));
+document.getElementById("round3").addEventListener("click", () => setRounds(3));
+
 // 启动：创建音频上下文并预加载语音包
 // （解码不需要用户手势，播放才需要——"解锁"在按钮点击时完成）
 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 loadAudioPieces();
 loadHistory();
+loadSettings();    // D7：训练手/训练量设置
+renderSettings();
 renderReport();
+
+// D7 PWA：注册离线缓存服务（注册失败不影响功能，例如非 HTTPS 环境静默跳过）
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
