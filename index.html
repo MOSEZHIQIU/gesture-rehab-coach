@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AI 手势康复操教练（原型 v0.7.2）</title>
+<title>AI 手势康复操教练（原型 v0.7.3）</title>
 <!-- D7 PWA：可"添加到主屏幕"独立运行；首次联网打开后，之后断网也能用 -->
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -273,7 +273,7 @@
 
 <header>
   <h1>🤲 AI 手势康复操教练</h1>
-  <p>原型 v0.7.2 —— 语音引导 + 左右手/训练量设置 + 离线可用：任何浏览器都能发声、数据只存本机</p>
+  <p>原型 v0.7.3 —— 语音引导 + 左右手/训练量设置 + 离线可用：任何浏览器都能发声、数据只存本机</p>
 </header>
 
 <main>
@@ -330,7 +330,7 @@
     <button id="btnVoice">🔊 语音提示：开</button>
   </div>
 
-  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.2）</div>
+  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.3）</div>
 
   <div class="error-box" id="errBox"></div>
 
@@ -807,20 +807,35 @@ function updateExercise() {
   }
 }
 
-// 加载模型（手部关键点模型，约 7MB，加载一次后浏览器会缓存）
+// 加载模型（约 7MB，第一次较慢）。本站文件优先（不依赖 Google，评审现场
+// 防翻车），失败或超时自动回退 Google 官方源——双重保险；
+// 超时保护：手机网络慢时不能干等，30 秒无结果就换源
 async function loadModel() {
-  setStatus("正在下载识别模型（约 7MB，第一次较慢）…");
-  // 模型自托管：从本站加载，不依赖 Google 服务器（其域名在中国大陆时好时坏，
-  // 评审现场网络一旦不通整个演示就翻车）；且配合 PWA 缓存，断网也能识别
-  const modelUrl = "./hand_landmarker.task";
   const vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
   );
-  landmarker = await HandLandmarker.createFromOptions(vision, {
+  const tryLoad = (modelUrl) => HandLandmarker.createFromOptions(vision, {
     baseOptions: { modelAssetPath: modelUrl, delegate: "GPU" },
     runningMode: "VIDEO",
     numHands: 2,
   });
+  const wait = (ms) => new Promise((_, rej) =>
+    setTimeout(() => rej(new Error("超时")), ms));
+  setStatus("正在下载识别模型（约 7MB，第一次较慢）…");
+  try {
+    landmarker = await Promise.race([tryLoad("./hand_landmarker.task"), wait(30000)]);
+  } catch (e) {
+    setStatus("本地模型加载失败，改用备用源重试…");
+    try {
+      landmarker = await Promise.race([
+        tryLoad("https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
+          + "hand_landmarker/float16/1/hand_landmarker.task"),
+        wait(45000),
+      ]);
+    } catch (e2) {
+      throw new Error("模型加载失败（本地和备用源都不通），请检查网络后刷新重试");
+    }
+  }
   setStatus("模型就绪 ✓");
 }
 
