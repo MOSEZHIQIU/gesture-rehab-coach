@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AI 手势康复操教练（原型 v0.7.5）</title>
+<title>AI 手势康复操教练（原型 v0.7.6）</title>
 <!-- D7 PWA：可"添加到主屏幕"独立运行；首次联网打开后，之后断网也能用 -->
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -17,7 +17,7 @@ setTimeout(function () {
   if (!window.__appReady) {
     var el = document.getElementById("sysmsg");
     if (el) el.textContent =
-      "程序加载失败：首次打开需要联网，请检查网络后刷新重试（页面版本 v0.7.5）";
+      "程序加载失败：首次打开需要联网，请检查网络后刷新重试（页面版本 v0.7.6）";
   }
 }, 20000);
 </script>
@@ -164,6 +164,26 @@ setTimeout(function () {
   .set-btn:disabled { opacity: .45; cursor: not-allowed; }
   .set-tip { font-size: 18px; color: #7a8b89; margin-left: 6px; }
 
+  /* 备份/恢复：记录跟设备走，导出文字备份可跨设备搬移 */
+  .his-actions { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+  .his-actions button {
+    font-size: 22px; padding: 12px 26px;
+    background: #e9efee; color: var(--deep);
+    border-radius: 999px; border: none; font-weight: 700;
+  }
+  #restoreBox { margin-top: 12px; }
+  #restoreBox textarea {
+    width: 100%; height: 110px; font-size: 15px; padding: 10px;
+    border-radius: 10px; border: 2px solid var(--teal);
+    background: #f7faf9; color: var(--ink);
+  }
+  #restoreBox button {
+    font-size: 22px; padding: 10px 24px; margin: 10px 10px 0 0;
+    border-radius: 999px; border: none; font-weight: 700;
+    background: #e9efee; color: var(--deep);
+  }
+  #restoreBox #btnRestoreOk { background: var(--teal); color: #fff; }
+
   .hint {
     margin-top: 24px;
     text-align: center;
@@ -284,7 +304,7 @@ setTimeout(function () {
 
 <header>
   <h1>🤲 AI 手势康复操教练</h1>
-  <p>原型 v0.7.5 —— 语音引导 + 左右手/训练量设置 + 离线可用：任何浏览器都能发声、数据只存本机</p>
+  <p>原型 v0.7.6 —— 语音引导 + 左右手/训练量设置 + 离线可用 + 记录备份：任何浏览器都能发声、数据只存本机</p>
 </header>
 
 <main>
@@ -341,7 +361,7 @@ setTimeout(function () {
     <button id="btnVoice">🔊 语音提示：开</button>
   </div>
 
-  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.5）</div>
+  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.6）</div>
 
   <div class="error-box" id="errBox"></div>
 
@@ -370,7 +390,18 @@ setTimeout(function () {
       <div id="hisBars"></div>
       <div class="his-sub">最近记录</div>
       <div id="hisList"></div>
-      <div class="his-note">🔒 记录只保存在您自己的手机/电脑里，不上传任何地方</div>
+      <div class="his-note">🔒 记录只保存在您自己的手机/电脑里，不上传任何地方。换设备或微信清缓存会看不到记录——用下方「备份」把记录存起来，随时「恢复」</div>
+      <div class="his-actions">
+        <button id="btnBackup">💾 备份记录</button>
+        <button id="btnRestore">📥 恢复备份</button>
+      </div>
+      <div id="restoreBox" style="display:none">
+        <textarea id="restoreText" placeholder="把之前备份的那段文字整段粘贴到这里"></textarea>
+        <div>
+          <button id="btnRestoreOk">✅ 确认恢复</button>
+          <button id="btnRestoreCancel">取消</button>
+        </div>
+      </div>
       <button id="btnClear">🗑 清除全部记录</button>
     </div>
   </div>
@@ -1128,6 +1159,60 @@ document.getElementById("btnClear").addEventListener("click", () => {
   clearArmed = false;
   btn.textContent = "🗑 清除全部记录";
   setStatus("历史记录已清除");
+});
+
+// ===== D7.5 备份/恢复：记录只存本机，微信清缓存/换设备会看不到记录。
+// 备份 = 把记录变成一段文字，复制后粘给微信"文件传输助手"永久保存；
+// 恢复 = 粘贴回来。零服务器，隐私卖点不变 =====
+document.getElementById("btnBackup").addEventListener("click", async () => {
+  if (history.length === 0) { setStatus("还没有记录可以备份，先练一次吧"); return; }
+  const text = JSON.stringify(history);
+  let copied = false;
+  try { await navigator.clipboard.writeText(text); copied = true; } catch (e) {}
+  if (!copied) {
+    // 微信内置浏览器可能没有剪贴板接口：退回到老办法（临时文本框+全选复制）
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { copied = document.execCommand("copy"); } catch (e) {}
+    ta.remove();
+  }
+  // 顺带下载一份文件（电脑/系统浏览器里好保存）
+  try {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(
+      new Blob([text], { type: "application/json" }));
+    a.download = "手护健康训练记录-" + dateKey(Date.now()) + ".json";
+    a.click();
+  } catch (e) { /* 下载失败不影响复制备份 */ }
+  setStatus(copied
+    ? "✅ 已复制备份文字：去微信「文件传输助手」粘贴发给自己，就存下来了"
+    : "✅ 备份文件已下载，请保存好（复制功能不可用）");
+});
+
+document.getElementById("btnRestore").addEventListener("click", () => {
+  document.getElementById("restoreBox").style.display = "block";
+});
+document.getElementById("btnRestoreCancel").addEventListener("click", () => {
+  document.getElementById("restoreBox").style.display = "none";
+});
+document.getElementById("btnRestoreOk").addEventListener("click", () => {
+  const txt = document.getElementById("restoreText").value.trim();
+  document.getElementById("restoreBox").style.display = "none";
+  document.getElementById("restoreText").value = "";
+  if (!txt) { setStatus("请先把备份文字粘贴进输入框"); return; }
+  let data;
+  try { data = JSON.parse(txt); } catch (e) {
+    setStatus("备份文字格式不对——请整段复制，别漏字符"); return;
+  }
+  if (!Array.isArray(data) || data.some(e => !e || typeof e.t !== "number")) {
+    setStatus("这段文字不像是训练记录备份，请检查后重试"); return;
+  }
+  history = data.slice(0, HISTORY_MAX);
+  saveHistory();
+  renderReport();
+  setStatus("✅ 已恢复 " + history.length + " 条训练记录");
 });
 
 document.getElementById("btnStart").addEventListener("click", async () => {
