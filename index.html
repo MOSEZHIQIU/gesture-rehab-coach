@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AI 手势康复操教练（原型 v0.7.7）</title>
+<title>AI 手势康复操教练（原型 v0.7.8）</title>
 <!-- D7 PWA：可"添加到主屏幕"独立运行；首次联网打开后，之后断网也能用 -->
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -17,7 +17,7 @@ setTimeout(function () {
   if (!window.__appReady) {
     var el = document.getElementById("sysmsg");
     if (el) el.textContent =
-      "程序加载失败：首次打开需要联网，请检查网络后刷新重试（页面版本 v0.7.7）";
+      "程序加载失败：首次打开需要联网，请检查网络后刷新重试（页面版本 v0.7.8）";
   }
 }, 20000);
 </script>
@@ -323,7 +323,7 @@ setTimeout(function () {
 
 <header>
   <h1>🤲 AI 手势康复操教练</h1>
-  <p>原型 v0.7.7 —— 语音引导 + 左右手/训练量设置 + 离线可用 + 记录备份：任何浏览器都能发声、数据只存本机</p>
+  <p>原型 v0.7.8 —— 语音引导 + 左右手/训练量设置 + 离线可用 + 记录备份：任何浏览器都能发声、数据只存本机</p>
 </header>
 
 <main>
@@ -380,7 +380,7 @@ setTimeout(function () {
     <button id="btnVoice">🔊 语音提示：开</button>
   </div>
 
-  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.7）</div>
+  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.8）</div>
 
   <div class="error-box" id="errBox"></div>
 
@@ -570,16 +570,30 @@ function classifyGesture(hand) {
   // 对捏（放松时食指根也是抬起的，且拇指尖自然垂在食指旁 0.3~0.45 倍
   // 手长处）→ 收紧回 0.35 + 相对判据；对捏的"不灵敏"真凶是关键点抖动，
   // 已由投票机制解决，不需要宽松阈值兜底
+  // v0.7.8 测试反馈：握拳换角度时拇指尖会贴到食指尖，光看距离会误判对捏。
+  // 加第三道关——真对捏时中指/无名指是伸直的（自然姿势），攥拳则弯着：
+  // 角度怎么换，弯着的中指/无名指都不会变直
   const pinch =
     dist(hand[4], hand[8]) < s * 0.35 &&
-    dist(hand[4], hand[8]) < dist(hand[4], hand[6]) * 0.6;
+    dist(hand[4], hand[8]) < dist(hand[4], hand[6]) * 0.6 &&
+    (middle || ring);
 
   // 判定顺序重要：对捏时拇指张开、四指弯曲，样子最像竖大拇指，
   // 所以对捏必须最先查（测试反馈：顺序反了会把对捏误判成大拇指）
   // 竖大拇指 / 握拳都要求"至少 3 指真的弯起来"：
   // 自然放松的手四指只微弯、拇指耷拉着，一样都不能算
+  // v0.7.8 测试反馈：握拳侧转时拇指伸直搭在手指上，"拇指伸直+四指弯"
+  // 会把握拳误判成竖大拇指。加 thumbClear——真竖大拇指时拇指竖起、
+  // 指尖远离所有弯着的手指（指尖+指根都算）；攥拳时拇指总贴着
+  // 食指/中指某处，最近距离很小，这道关就拦下
+  const thumbClear = Math.min(
+    dist(hand[4], hand[6]),  dist(hand[4], hand[8]),
+    dist(hand[4], hand[10]), dist(hand[4], hand[12]),
+    dist(hand[4], hand[14]), dist(hand[4], hand[16]),
+    dist(hand[4], hand[18]), dist(hand[4], hand[20])
+  ) > s * 0.35;
   if (pinch) return "🤏 对捏";
-  if (thumb && extCount === 0 && curled >= 3) return "👍 竖大拇指";
+  if (thumb && extCount === 0 && curled >= 3 && thumbClear) return "👍 竖大拇指";
   // 剪刀手：食指+中指伸直、无名指+小指弯，且两指要张开呈 V 形。
   // 两指尖距离 > 0.25 倍手长——放松的手食指中指自然并在一起，
   // 再伸也达不到这个距离（测试反馈：放松的手某些角度误判剪刀手）。
