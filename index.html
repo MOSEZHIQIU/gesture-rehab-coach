@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AI 手势康复操教练（原型 v0.7.6）</title>
+<title>AI 手势康复操教练（原型 v0.7.7）</title>
 <!-- D7 PWA：可"添加到主屏幕"独立运行；首次联网打开后，之后断网也能用 -->
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -17,7 +17,7 @@ setTimeout(function () {
   if (!window.__appReady) {
     var el = document.getElementById("sysmsg");
     if (el) el.textContent =
-      "程序加载失败：首次打开需要联网，请检查网络后刷新重试（页面版本 v0.7.6）";
+      "程序加载失败：首次打开需要联网，请检查网络后刷新重试（页面版本 v0.7.7）";
   }
 }, 20000);
 </script>
@@ -164,6 +164,25 @@ setTimeout(function () {
   .set-btn:disabled { opacity: .45; cursor: not-allowed; }
   .set-tip { font-size: 18px; color: #7a8b89; margin-left: 6px; }
 
+  /* 装成桌面图标提示：微信清缓存会丢记录，家人一次装好老人点图标就行 */
+  .install-tip {
+    margin-top: 16px;
+    background: #fff7e8;
+    border: 2px solid var(--gold);
+    border-radius: 14px;
+    padding: 14px 16px;
+    font-size: 20px;
+    color: #8a5a20;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .install-tip button {
+    font-size: 20px; padding: 4px 12px;
+    background: none; border: none; color: #8a5a20;
+    cursor: pointer; flex-shrink: 0;
+  }
+
   /* 备份/恢复：记录跟设备走，导出文字备份可跨设备搬移 */
   .his-actions { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
   .his-actions button {
@@ -304,7 +323,7 @@ setTimeout(function () {
 
 <header>
   <h1>🤲 AI 手势康复操教练</h1>
-  <p>原型 v0.7.6 —— 语音引导 + 左右手/训练量设置 + 离线可用 + 记录备份：任何浏览器都能发声、数据只存本机</p>
+  <p>原型 v0.7.7 —— 语音引导 + 左右手/训练量设置 + 离线可用 + 记录备份：任何浏览器都能发声、数据只存本机</p>
 </header>
 
 <main>
@@ -361,7 +380,7 @@ setTimeout(function () {
     <button id="btnVoice">🔊 语音提示：开</button>
   </div>
 
-  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.6）</div>
+  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.7）</div>
 
   <div class="error-box" id="errBox"></div>
 
@@ -410,6 +429,11 @@ setTimeout(function () {
     ① 点「开始跟练」，跟着语音提示做动作<br>
     ② 将手掌完整伸入画面，光线充足更准确<br>
     ③ 每个动作保持 2 秒，"叮"一声即完成
+  </div>
+
+  <div class="install-tip" id="installTip" style="display:none">
+    <span id="installTipText"></span>
+    <button id="installTipClose">✕</button>
   </div>
 </main>
 
@@ -1322,6 +1346,29 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   });
 }
+
+// 使用方式提示（v0.7.7）：微信里清缓存会丢训练记录，老人不背这个锅——
+// 提示家人帮忙"添加到主屏幕"（一次性），以后老人点桌面图标进入，记录谁也清不掉。
+// 已装成应用（standalone）就不打扰；点 ✕ 后本次记住（记录被清空时提示会回来，正好）
+(function () {
+  const tip = document.getElementById("installTip");
+  if (!tip) return;
+  try {
+    if (localStorage.getItem("installTipOff")) return;
+  } catch (e) { return; }
+  const standalone = window.matchMedia &&
+    window.matchMedia("(display-mode: standalone)").matches;
+  if (standalone) return;
+  const isWx = /MicroMessenger/i.test(navigator.userAgent);
+  document.getElementById("installTipText").textContent = isWx
+    ? "微信内打开：清理微信缓存会清空训练记录。建议家人帮老人：用手机自带浏览器打开本页 → 菜单「添加到主屏幕」→ 以后点桌面图标进入，记录稳、还能离线练"
+    : "建议「添加到主屏幕」：浏览器菜单 → 添加到主屏幕，以后点桌面图标进入，训练记录更稳";
+  tip.style.display = "flex";
+  document.getElementById("installTipClose").addEventListener("click", () => {
+    tip.style.display = "none";
+    try { localStorage.setItem("installTipOff", "1"); } catch (e) {}
+  });
+})();
 
 window.__appReady = true;   // 通知加载看门狗：主程序全部就绪
 </script>
