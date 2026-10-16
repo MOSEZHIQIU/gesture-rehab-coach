@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AI 手势康复操教练（原型 v0.7.9）</title>
+<title>AI 手势康复操教练（原型 v0.7.10）</title>
 <!-- D7 PWA：可"添加到主屏幕"独立运行；首次联网打开后，之后断网也能用 -->
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -17,7 +17,7 @@ setTimeout(function () {
   if (!window.__appReady) {
     var el = document.getElementById("sysmsg");
     if (el) el.textContent =
-      "程序加载失败：首次打开需要联网，请检查网络后刷新重试（页面版本 v0.7.9）";
+      "程序加载失败：首次打开需要联网，请检查网络后刷新重试（页面版本 v0.7.10）";
   }
 }, 20000);
 </script>
@@ -163,6 +163,18 @@ setTimeout(function () {
   .set-btn.on { background: var(--teal); color: #fff; }
   .set-btn:disabled { opacity: .45; cursor: not-allowed; }
   .set-tip { font-size: 18px; color: #7a8b89; margin-left: 6px; }
+
+  /* 调试面板（v0.7.10）：点状态栏5下开启，显示判定真实数值，排查误判用 */
+  #dbg {
+    font-size: 18px;
+    background: #111;
+    color: #7fff7f;
+    padding: 10px 14px;
+    border-radius: 10px;
+    word-break: break-all;
+    line-height: 1.6;
+    margin-top: 10px;
+  }
 
   /* 装成桌面图标提示：微信清缓存会丢记录，家人一次装好老人点图标就行 */
   .install-tip {
@@ -323,7 +335,7 @@ setTimeout(function () {
 
 <header>
   <h1>🤲 AI 手势康复操教练</h1>
-  <p>原型 v0.7.9 —— 语音引导 + 左右手/训练量设置 + 离线可用 + 记录备份：任何浏览器都能发声、数据只存本机</p>
+  <p>原型 v0.7.10 —— 语音引导 + 左右手/训练量设置 + 离线可用 + 记录备份：任何浏览器都能发声、数据只存本机</p>
 </header>
 
 <main>
@@ -380,7 +392,8 @@ setTimeout(function () {
     <button id="btnVoice">🔊 语音提示：开</button>
   </div>
 
-  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.9）</div>
+  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.10）</div>
+  <div id="dbg" style="display:none"></div>
 
   <div class="error-box" id="errBox"></div>
 
@@ -500,6 +513,7 @@ let lastT = performance.now();
 
 // ===== 手势判定状态（D2） =====
 let stableGesture     = "无手势";  // 投票确认后的手势（对外显示）
+let lastDiag          = null;      // 最近一帧的判定数值（调试面板用，v0.7.10）
 let gestureConfirmed  = false;     // 当前是否已有确认手势
 let gestureHistory    = [];        // 最近若干帧的原始判定（滑动窗口投票）
 let lastSpoken        = "";        // 上一次语音播报的手势（避免重复播报）
@@ -593,6 +607,18 @@ function classifyGesture(hand) {
     dist(hand[4], hand[6]),  dist(hand[4], hand[10]),
     dist(hand[4], hand[14]), dist(hand[4], hand[18])
   ) > s * 0.35;
+  // v0.7.10 调试面板数据：把判定用到的真实数值存下来（点状态栏 5 下开面板）
+  lastDiag = {
+    thumbRatio: +(dist(hand[4], hand[17]) /
+      Math.max(dist(hand[2], hand[17]), 1e-6)).toFixed(2),
+    clearMin: +(Math.min(
+      dist(hand[4], hand[6]), dist(hand[4], hand[10]),
+      dist(hand[4], hand[14]), dist(hand[4], hand[18])) / s).toFixed(2),
+    ext: [index, middle, ring, pinky].map((b) => (b ? 1 : 0)).join(""),
+    curled,
+    thumb,
+    pinchD: +(dist(hand[4], hand[8]) / s).toFixed(2),
+  };
   if (pinch) return "🤏 对捏";
   if (thumb && extCount === 0 && curled >= 3 && thumbClear) return "👍 竖大拇指";
   // 剪刀手：食指+中指伸直、无名指+小指弯，且两指要张开呈 V 形。
@@ -997,6 +1023,16 @@ function tick() {
         // D2：手势判定（只看第一只手；判定用距离，镜像不影响结果）
         const raw = hands.length > 0 ? classifyGesture(hands[0]) : "无手势";
         updateGesture(raw);
+        // v0.7.10 调试面板（点状态栏 5 下开启）：实时显示判定数值，排查误判用
+        if (dbgOn && lastDiag) {
+          dbgEl.textContent =
+            "手势:" + raw +
+            "｜拇指比:" + lastDiag.thumbRatio + "(>1.3竖)" +
+            "｜拇指离指根:" + lastDiag.clearMin + "(>0.35)" +
+            "｜四指伸直:" + lastDiag.ext + " 弯" + lastDiag.curled +
+            "｜拇指伸:" + lastDiag.thumb +
+            "｜捏距:" + lastDiag.pinchD + "(<0.35捏)";
+        }
         // D3：跟练模式下的进度判定
         if (exMode) updateExercise();
         // 连续约 2 秒没检测到手：给用户提示（可能光线暗 / 手太远 / 没伸进画面）
@@ -1382,6 +1418,24 @@ if ("serviceWorker" in navigator) {
   document.getElementById("installTipClose").addEventListener("click", () => {
     tip.style.display = "none";
     try { localStorage.setItem("installTipOff", "1"); } catch (e) {}
+  });
+})();
+
+// 调试面板开关（v0.7.10）：点状态栏 5 下（3 秒内）切换显示/隐藏
+// 只给排查误判用；老人不会误触（平时没人连点状态栏）
+const dbgEl = document.getElementById("dbg");
+let dbgOn = false;
+(function () {
+  let taps = 0, lastTap = 0;
+  sysmsg.addEventListener("click", () => {
+    const now = Date.now();
+    if (now - lastTap > 3000) taps = 0;
+    lastTap = now;
+    if (++taps >= 5) {
+      taps = 0;
+      dbgOn = !dbgOn;
+      dbgEl.style.display = dbgOn ? "block" : "none";
+    }
   });
 })();
 
