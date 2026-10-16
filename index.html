@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AI 手势康复操教练（原型 v0.7.8）</title>
+<title>AI 手势康复操教练（原型 v0.7.9）</title>
 <!-- D7 PWA：可"添加到主屏幕"独立运行；首次联网打开后，之后断网也能用 -->
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -17,7 +17,7 @@ setTimeout(function () {
   if (!window.__appReady) {
     var el = document.getElementById("sysmsg");
     if (el) el.textContent =
-      "程序加载失败：首次打开需要联网，请检查网络后刷新重试（页面版本 v0.7.8）";
+      "程序加载失败：首次打开需要联网，请检查网络后刷新重试（页面版本 v0.7.9）";
   }
 }, 20000);
 </script>
@@ -323,7 +323,7 @@ setTimeout(function () {
 
 <header>
   <h1>🤲 AI 手势康复操教练</h1>
-  <p>原型 v0.7.8 —— 语音引导 + 左右手/训练量设置 + 离线可用 + 记录备份：任何浏览器都能发声、数据只存本机</p>
+  <p>原型 v0.7.9 —— 语音引导 + 左右手/训练量设置 + 离线可用 + 记录备份：任何浏览器都能发声、数据只存本机</p>
 </header>
 
 <main>
@@ -380,7 +380,7 @@ setTimeout(function () {
     <button id="btnVoice">🔊 语音提示：开</button>
   </div>
 
-  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.8）</div>
+  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.9）</div>
 
   <div class="error-box" id="errBox"></div>
 
@@ -583,14 +583,15 @@ function classifyGesture(hand) {
   // 竖大拇指 / 握拳都要求"至少 3 指真的弯起来"：
   // 自然放松的手四指只微弯、拇指耷拉着，一样都不能算
   // v0.7.8 测试反馈：握拳侧转时拇指伸直搭在手指上，"拇指伸直+四指弯"
-  // 会把握拳误判成竖大拇指。加 thumbClear——真竖大拇指时拇指竖起、
-  // 指尖远离所有弯着的手指（指尖+指根都算）；攥拳时拇指总贴着
-  // 食指/中指某处，最近距离很小，这道关就拦下
+  // 会把握拳误判成竖大拇指。加 thumbClear：真竖大拇指时拇指竖起、
+  // 指尖远离弯着的手指；攥拳时拇指总贴着食指/中指，最近距离很小
+  // v0.7.9 测试反馈：手背对着摄像头竖大拇指被判成握拳——弯手指的
+  // 指尖在手掌背面（被手挡住），关键点投影不稳，会把"拇指尖到指尖"
+  // 的距离压小误拦。只留 4 个指根（关节在拳头上永远露着，投影最稳）：
+  // 竖大拇指时拇指尖高出拳面离指根远；攥拳时拇指贴着指根，照样分得开
   const thumbClear = Math.min(
-    dist(hand[4], hand[6]),  dist(hand[4], hand[8]),
-    dist(hand[4], hand[10]), dist(hand[4], hand[12]),
-    dist(hand[4], hand[14]), dist(hand[4], hand[16]),
-    dist(hand[4], hand[18]), dist(hand[4], hand[20])
+    dist(hand[4], hand[6]),  dist(hand[4], hand[10]),
+    dist(hand[4], hand[14]), dist(hand[4], hand[18])
   ) > s * 0.35;
   if (pinch) return "🤏 对捏";
   if (thumb && extCount === 0 && curled >= 3 && thumbClear) return "👍 竖大拇指";
