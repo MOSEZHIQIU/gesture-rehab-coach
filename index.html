@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AI 手势康复操教练（原型 v0.7.11）</title>
+<title>AI 手势康复操教练（原型 v0.7.12）</title>
 <!-- D7 PWA：可"添加到主屏幕"独立运行；首次联网打开后，之后断网也能用 -->
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -17,7 +17,7 @@ setTimeout(function () {
   if (!window.__appReady) {
     var el = document.getElementById("sysmsg");
     if (el) el.textContent =
-      "程序加载失败：首次打开需要联网，请检查网络后刷新重试（页面版本 v0.7.11）";
+      "程序加载失败：首次打开需要联网，请检查网络后刷新重试（页面版本 v0.7.12）";
   }
 }, 20000);
 </script>
@@ -165,7 +165,7 @@ setTimeout(function () {
   .set-tip { font-size: 18px; color: #7a8b89; margin-left: 6px; }
 
   /* 调试面板（v0.7.10）：点状态栏5下开启，显示判定真实数值，排查误判用 */
-  #dbg {
+  #dbgPanel {
     font-size: 18px;
     background: #111;
     color: #7fff7f;
@@ -335,7 +335,7 @@ setTimeout(function () {
 
 <header>
   <h1>🤲 AI 手势康复操教练</h1>
-  <p>原型 v0.7.11 —— 语音引导 + 左右手/训练量设置 + 离线可用 + 记录备份：任何浏览器都能发声、数据只存本机</p>
+  <p>原型 v0.7.12 —— 语音引导 + 左右手/训练量设置 + 离线可用 + 记录备份：任何浏览器都能发声、数据只存本机</p>
 </header>
 
 <main>
@@ -392,8 +392,8 @@ setTimeout(function () {
     <button id="btnVoice">🔊 语音提示：开</button>
   </div>
 
-  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.11）</div>
-  <div id="dbg" style="display:none"></div>
+  <div class="sysmsg" id="sysmsg">状态：就绪，点击"开始识别"。（页面版本 v0.7.12）</div>
+  <div id="dbgPanel" style="display:none"></div>
 
   <div class="error-box" id="errBox"></div>
 
@@ -917,7 +917,7 @@ function updateExercise() {
 
 // 加载模型（约 7MB，第一次较慢）。本站文件优先（不依赖 Google，评审现场
 // 防翻车），失败或超时自动回退 Google 官方源——双重保险；
-// 超时保护：手机网络慢时不能干等，30 秒无结果就换源
+// 超时保护：手机网络慢时不能干等，60 秒无结果才换源
 async function loadModel() {
   const vision = await FilesetResolver.forVisionTasks("./");
   const tryLoad = (modelUrl) => HandLandmarker.createFromOptions(vision, {
@@ -931,14 +931,14 @@ async function loadModel() {
   try {
     // ?v=2 绕开旧版缓存里可能存的半截模型文件（脏缓存曾导致加载必失败）
     landmarker = await Promise.race(
-      [tryLoad("./hand_landmarker.task?v=2"), wait(30000)]);
+      [tryLoad("./hand_landmarker.task?v=2"), wait(60000)]);
   } catch (e) {
     setStatus("本地模型加载失败，改用备用源重试…");
     try {
       landmarker = await Promise.race([
         tryLoad("https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
           + "hand_landmarker/float16/1/hand_landmarker.task"),
-        wait(45000),
+        wait(90000),
       ]);
     } catch (e2) {
       throw new Error("模型加载失败（本地和备用源都不通），请检查网络后刷新重试");
@@ -1423,7 +1423,7 @@ if ("serviceWorker" in navigator) {
 
 // 调试面板开关（v0.7.10）：点状态栏 5 下（3 秒内）切换显示/隐藏
 // 只给排查误判用；老人不会误触（平时没人连点状态栏）
-const dbgEl = document.getElementById("dbg");
+const dbgEl = document.getElementById("dbgPanel");
 let dbgOn = false;
 (function () {
   let taps = 0, lastTap = 0;
