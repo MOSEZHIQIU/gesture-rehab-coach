@@ -935,9 +935,10 @@ async function loadModel() {
   } catch (e) {
     setStatus("本地模型加载失败，改用备用源重试…");
     try {
+      // 备用源=自家 OSS 桶直链（国内可达，比 Google 可靠；已配 CORS）
       landmarker = await Promise.race([
-        tryLoad("https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
-          + "hand_landmarker/float16/1/hand_landmarker.task"),
+        tryLoad("https://shouhu-rehab-app.oss-ap-southeast-1.aliyuncs.com/"
+          + "hand_landmarker.task?v=2"),
         wait(90000),
       ]);
     } catch (e2) {

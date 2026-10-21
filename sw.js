@@ -5,13 +5,12 @@
 //                       的 Range 分段请求直接从缓存切片回 206，不再每次重下
 //   （库和模型文件内容不变，升级靠 CACHE_NAME 整库换新）
 //   跨域资源             —— 网络优先 + 运行时缓存
-const CACHE_NAME = "handrehab-v3";
-//   v2：旧版缓存过模型分段下载的半截文件，必须整库废弃
-//   v3：模型加载器用 Range 读文件，v2 的"Range 直连网络"=每次重下模型；
-//       改为从缓存的完整模型切字节回 206，并预缓存整个模型文件
+const CACHE_NAME = "handrehab-v4";
+//   v3：预缓存整个模型文件（7.8MB）——iOS Safari 上 SW 大文件缓存
+//       读取会挂起，导致"本地模型加载失败"；v4 模型改网络直连
+//   v4：install 只预缓存小文件；模型（.task）一律网络直连不碰缓存
 const CORE = ["./", "./index.html", "./manifest.json",
-  "./icon-192.png", "./icon-512.png",
-  "./hand_landmarker.task?v=2"];   // 预缓存整模型：Range 切片才有整块来源
+  "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(
@@ -85,6 +84,22 @@ self.addEventListener("fetch", (e) => {
           });
         });
       }).catch(() => fetch(e.request))
+    );
+    return;
+  }
+
+  // 模型文件：网络优先（iOS Safari 从 Cache API 读大文件会挂起，在线
+  // 必须直连），成功时后台写缓存、断网时回退缓存——离线能力保住
+  if (url.pathname.endsWith(".task")) {
+    e.respondWith(
+      fetch(e.request).then((res) => {
+        if (res.ok && res.status === 200) {
+          caches.open(CACHE_NAME)
+            .then((c) => c.put(e.request, res.clone()))
+            .catch(() => {});
+        }
+        return res;
+      }).catch(() => caches.match(e.request))
     );
     return;
   }
